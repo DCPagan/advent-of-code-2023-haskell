@@ -1,18 +1,16 @@
 module Days.Day01 (runDay) where
 
 {- ORMOLU_DISABLE -}
+import Control.Applicative ((<|>), many)
+import Data.Char (digitToInt, isDigit)
+import Data.Either (fromRight)
 import Data.List
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
 import Data.Maybe
-import Data.Set (Set)
-import qualified Data.Set as Set
-import Data.Vector (Vector)
-import qualified Data.Vector as Vec
-import qualified Util.Util as U
+import qualified Data.Text as T
 
 import qualified Program.RunDay as R (runDay, Day)
 import Data.Attoparsec.Text
+import Data.Attoparsec.Combinator (lookAhead)
 import Data.Void
 {- ORMOLU_ENABLE -}
 
@@ -21,19 +19,41 @@ runDay = R.runDay inputParser partA partB
 
 ------------ PARSER ------------
 inputParser :: Parser Input
-inputParser = error "Not implemented yet!"
+inputParser = takeText
 
 ------------ TYPES ------------
-type Input = Void
+type Input = T.Text
 
-type OutputA = Void
+type OutputA = Int
 
-type OutputB = Void
+type OutputB = Int
 
 ------------ PART A ------------
+calibration :: [Int] -> Int
+calibration = (+) <$> (10 *) . head <*> last
+
+finalCalibration :: (T.Text -> [Int]) -> T.Text -> Int
+finalCalibration getDigits = sum . map (calibration . getDigits) . T.lines
+
 partA :: Input -> OutputA
-partA = error "Not implemented yet!"
+partA = finalCalibration (map digitToInt . filter isDigit . T.unpack)
 
 ------------ PART B ------------
+nominalNumber :: Parser Int
+nominalNumber = 1 <$ string "one"
+  <|> 2 <$ string "two"
+  <|> 3 <$ string "three"
+  <|> 4 <$ string "four"
+  <|> 5 <$ string "five"
+  <|> 6 <$ string "six"
+  <|> 7 <$ string "seven"
+  <|> 8 <$ string "eight"
+  <|> 9 <$ string "nine"
+
+numbers :: Parser [Int]
+numbers = catMaybes <$> many (
+  fmap Just (lookAhead (nominalNumber <|> digitToInt <$> digit) <* anyChar)
+    <|> Nothing <$ anyChar)
+
 partB :: Input -> OutputB
-partB = error "Not implemented yet!"
+partB = finalCalibration (fromRight [] . parseOnly numbers)
