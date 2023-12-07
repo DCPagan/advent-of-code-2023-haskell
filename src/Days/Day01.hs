@@ -2,6 +2,8 @@ module Days.Day01 (runDay) where
 
 {- ORMOLU_DISABLE -}
 import Control.Applicative ((<|>), many)
+import Data.Attoparsec.Combinator (lookAhead)
+import Data.Attoparsec.Text
 import Data.Char (digitToInt, isDigit)
 import Data.Either (fromRight)
 import Data.List
@@ -9,9 +11,6 @@ import Data.Maybe
 import qualified Data.Text as T
 
 import qualified Program.RunDay as R (runDay, Day)
-import Data.Attoparsec.Text
-import Data.Attoparsec.Combinator (lookAhead)
-import Data.Void
 {- ORMOLU_ENABLE -}
 
 runDay :: R.Day

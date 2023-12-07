@@ -19,16 +19,17 @@ extra-source-files:
 description:         A template for Advent of Code projects in Haskell
 
 dependencies:
-- base >= 4.7 && < 5
-- time
 - ansi-terminal
+- attoparsec
+- base >= 4.7 && < 5
+- containers
 - directory
+- lens
+- mtl
 - optparse-applicative
 - parser-combinators
-- attoparsec
-- containers
 - text
-- mtl
+- time
 - vector
 
 library:
