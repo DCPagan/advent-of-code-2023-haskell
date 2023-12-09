@@ -122,5 +122,18 @@ partA = getSum . foldMapOf (traverse . serialId) Sum
   . filterByDrawLimit limit
 
 ------------ PART B ------------
+maxColors :: Draw -> Draw -> Draw
+maxColors a b = Draw {
+  _red = on max _red a b,
+  _green = on max _green a b,
+  _blue = on max _blue a b
+}
+
+maximumColors :: Game -> Draw
+maximumColors = foldrOf (draws . traverse) maxColors mempty
+
+colorPower :: Draw -> Word
+colorPower = getProduct . foldMap ((Product .) . view) [red, green, blue]
+
 partB :: Input -> OutputB
-partB = error "Not implemented yet!"
+partB = getSum . foldMapOf traverse (Sum . colorPower . maximumColors)
