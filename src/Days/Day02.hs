@@ -2,7 +2,7 @@
 module Days.Day02 (runDay) where
 
 {- ORMOLU_DISABLE -}
-import Control.Applicative ((<|>), many)
+import Control.Applicative
 import Control.Lens
 import Data.Attoparsec.Text
 import Data.Foldable (fold)
@@ -114,12 +114,11 @@ drawLimit :: Draw -> Draw -> Bool
 drawLimit = getPredicate . foldMap
   ((Predicate .) . on (>=) . view) [red, green, blue]
 
-filterByDrawLimit :: Draw -> [Game] -> [Game]
-filterByDrawLimit = filter . allOf (draws . traverse) . drawLimit
+inDrawLimit :: Draw -> Game -> Bool
+inDrawLimit = allOf (draws . traverse) . drawLimit
 
 partA :: Input -> OutputA
-partA = getSum . foldMapOf (traverse . serialId) Sum
-  . filterByDrawLimit limit
+partA = getSum . foldMapOf (traverse . filtered (inDrawLimit limit) . serialId) Sum
 
 ------------ PART B ------------
 maxColors :: Draw -> Draw -> Draw

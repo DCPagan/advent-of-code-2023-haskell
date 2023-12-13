@@ -27,6 +27,7 @@ dependencies:
 - lens
 - mtl
 - optparse-applicative
+- parsec
 - parser-combinators
 - text
 - time
