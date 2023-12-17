@@ -26,14 +26,13 @@ import qualified Program.RunDay as R (runDay, Day)
 ------------ TYPES ------------
 data SchematicNumber where
   SchematicNumber :: {
-    _num :: Int,
-    _len :: Int
+    _num :: Int
   } -> SchematicNumber
   deriving (Eq, Show)
 makeLenses ''SchematicNumber
 
 data SchematicVariant where
-  NumberElement :: SchematicNumber -> SchematicVariant
+  NumberElement :: Int -> SchematicVariant
   SymbolElement :: Char -> SchematicVariant
   deriving (Eq, Show)
 makePrisms ''SchematicVariant
@@ -48,8 +47,8 @@ makeLenses ''SchematicElement
 
 data SchematicMap where
   SchematicMap :: {
-    _numbers :: Map.Map (Int, Int) SchematicNumber,
-    _symbols :: Map.Map (Int, Int) Char
+    _numbers :: Map.Map (Int, Int) SchematicVariant,
+    _symbols :: Map.Map (Int, Int) SchematicVariant
   } -> SchematicMap
   deriving (Eq, Show)
 makeLenses ''SchematicMap
@@ -73,6 +72,11 @@ type OutputA = Int
 type OutputB = Int
 
 ------------ PARSER ------------
+toSchematicMapSingleton :: SchematicElement -> SchematicMap
+toSchematicMapSingleton se@SchematicElement { _variant, _coords } = case _variant of
+  NumberElement {} -> set numbers (Map.singleton _coords _variant) mempty
+  SymbolElement {} -> set symbols (Map.singleton _coords _variant) mempty
+
 isSymbolElement :: Char -> Bool
 isSymbolElement = getPredicate $
   Predicate isPrint
@@ -81,12 +85,7 @@ isSymbolElement = getPredicate $
     <> Predicate (not . ('.' ==))
 
 parseNumberElement :: Parser SchematicVariant
-parseNumberElement = do
-  digits <- some digit
-  return $ NumberElement SchematicNumber {
-    _num = read digits,
-    _len = length digits
-  }
+parseNumberElement = NumberElement . read <$> some digit
 
 parseSymbolElement :: Parser SchematicVariant
 parseSymbolElement = SymbolElement <$> satisfy isSymbolElement
@@ -104,11 +103,14 @@ parseSchematicLine :: Parser [SchematicElement]
 parseSchematicLine = many $
   between (many (char '.')) (many (char '.')) parseSchematicElement
 
-parseSchematics :: Parser [SchematicElement]
-parseSchematics = concat <$> sepEndBy parseSchematicLine endOfLine
+parseSchematicLines :: Parser [SchematicElement]
+parseSchematicLines = concat <$> sepEndBy parseSchematicLine endOfLine
 
-parseSchematicMap :: Parser SchematicMap
-parseSchematicMap = foldMapOf traverse toSchematicMapSingleton <$> parseSchematics
+parseSchematics :: Parser SchematicMap
+parseSchematics = foldMapOf traverse toSchematicMapSingleton <$> parseSchematicLines
+
+readSchematics :: T.Text -> SchematicMap
+readSchematics = fromRight mempty . runParser parseSchematics () "input"
 
 runDay :: R.Day
 runDay = R.runDay inputParser partA partB
@@ -117,50 +119,50 @@ inputParser :: Atto.Parser Input
 inputParser = Atto.takeText
 
 ------------ PART A ------------
-toSchematicMapSingleton :: SchematicElement -> SchematicMap
-toSchematicMapSingleton se@SchematicElement { _variant, _coords } = case _variant of
-  NumberElement n -> set numbers (Map.singleton _coords n) mempty
-  SymbolElement c -> set symbols (Map.singleton _coords c) mempty
+lengthOfSchematicItem :: SchematicVariant -> Int
+lengthOfSchematicItem (NumberElement n) = length.show $ n
+lengthOfSchematicItem (SymbolElement _) = 1
 
-lookLeft :: ((Int, Int), SchematicNumber) -> (Int, Int) -> Bool
-lookLeft (k, _) = (over _2 pred k ==)
-
-lookRight :: ((Int, Int), SchematicNumber) -> (Int, Int) -> Bool
-lookRight (k, SchematicNumber { _len }) = (over _2 (_len +) k ==)
-
-lookUp :: ((Int, Int), SchematicNumber) -> (Int, Int) -> Bool
-lookUp ((y, x), SchematicNumber { _len }) = inRange ((u, l), (u, r))
+lookAround :: (Int, Int) -> SchematicVariant -> (Int, Int) -> SchematicVariant -> Bool
+lookAround (y, x) b k a = inRange ((up, left), (down, right)) k
   where
-    u = pred y
-    l = pred x
-    r = x + _len
+    up = pred y
+    down = succ y
+    left = x - lengthOfSchematicItem a
+    right = x + lengthOfSchematicItem b
 
-lookDown :: ((Int, Int), SchematicNumber) -> (Int, Int) -> Bool
-lookDown ((y, x), SchematicNumber { _len }) = inRange ((d, l), (d, r))
-  where
-    d = succ y
-    l = pred x
-    r = x + _len
+hasAdjacentElement :: Map.Map (Int, Int) SchematicVariant ->
+  (Int, Int) -> SchematicVariant -> Bool
+hasAdjacentElement m k v = iany (lookAround k v) m
 
-lookAround :: ((Int, Int), SchematicNumber) -> (Int, Int) -> Bool
-lookAround = (getAny .) .
-  ((Any .) . lookUp
-    <> (Any .) . lookDown
-    <> (Any .) . lookLeft
-    <> (Any .) . lookRight)
-
-hasAdjacentElement :: Map.Map (Int, Int) a -> (Int, Int) -> SchematicNumber -> Bool
-hasAdjacentElement m k n = iany (const . lookAround (k, n)) m
-
-numbersAdjacentToSymbol :: SchematicMap -> Map.Map (Int, Int) SchematicNumber
-numbersAdjacentToSymbol m@SchematicMap { _numbers, _symbols }
-  = Map.filterWithKey (hasAdjacentElement _symbols) _numbers
+partNumberSum :: SchematicMap -> Int
+partNumberSum schematics = au (_Wrapping Sum)
+  (foldMapOf $ numbers . itraversed
+    . ifiltered (schematics ^. symbols . to hasAdjacentElement)
+    . indexing _NumberElement)
+  schematics
 
 partA :: Input -> OutputA
-partA = getSum . foldMapOf (traverse . num) Sum
-  . numbersAdjacentToSymbol . fromRight mempty
-  . runParser parseSchematicMap () "input"
+partA = partNumberSum . readSchematics
 
 ------------ PART B ------------
+getAdjacentElements :: Map.Map (Int, Int) SchematicVariant ->
+  (Int, Int) -> SchematicVariant -> [SchematicVariant]
+getAdjacentElements m k v = m ^.. itraversed . ifiltered (lookAround k v)
+
+getGearAssocs :: SchematicMap -> [((Int, Int), SchematicVariant)]
+getGearAssocs = toListOf $ symbols . to itoList . traversed . filtered ((SymbolElement '*' ==).snd)
+
+getAdjacentNumbers :: SchematicMap -> [((Int, Int), SchematicVariant)] ->
+  [((Int, Int), [Int])]
+getAdjacentNumbers schematics = over mapped $ (,)
+  <$> fst
+  <*> catMaybes . map (preview _NumberElement)
+    . uncurry (schematics ^. numbers . to getAdjacentElements)
+
+getGearRatioSum :: [((Int, Int), [Int])] -> Int
+getGearRatioSum = au (_Wrapping Sum)
+  (foldMapOf $ traverse . filtered ((2 ==).length.snd) . _2 . to product)
+
 partB :: Input -> OutputB
-partB = error "Not implemented yet!"
+partB = getGearRatioSum . (getAdjacentNumbers <*> getGearAssocs) . readSchematics

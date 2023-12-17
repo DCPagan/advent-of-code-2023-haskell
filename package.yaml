@@ -39,7 +39,6 @@ library:
     - LambdaCase
     - MultiWayIf
     - RecordWildCards
-    - OverloadedRecordDot
     - OverloadedStrings
     - GADTs
     - GHC2021
@@ -63,7 +62,6 @@ executables:
     - LambdaCase
     - MultiWayIf
     - RecordWildCards
-    - OverloadedRecordDot
     - OverloadedStrings
     - GADTs
     - GHC2021
