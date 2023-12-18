@@ -1,10 +1,10 @@
-name:                aoc-template
+name:                advent-of-code-2023-haskell
 version:             2023.0
-github:              "samcoy3/advent-of-code-template"
+github:              "DCPagan/advent-of-code-2023-haskell"
 license:             BSD3
-author:              "Sam Coy"
-maintainer:          "samcoy3@gmail.com"
-copyright:           "2023 Sam Coy"
+author:              "D.C. Pagan"
+maintainer:          "dcpagan@posteo.net"
+copyright:           "2023 D.C. Pagan"
 
 extra-source-files:
 - README.md
