@@ -1,4 +1,4 @@
-name:                advent-of-code-2023-haskell
+name:                advent-of-code-y2023-haskell
 version:             2023.0
 github:              "DCPagan/advent-of-code-2023-haskell"
 license:             BSD3
@@ -44,7 +44,7 @@ library:
     - GHC2021
 
 executables:
-  aoc-template-exe:
+  advent-of-code-y2023-haskell-exe:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
@@ -66,4 +66,4 @@ executables:
     - GADTs
     - GHC2021
     dependencies:
-    - aoc-template
+    - advent-of-code-y2023-haskell

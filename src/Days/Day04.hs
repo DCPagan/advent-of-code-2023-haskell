@@ -4,6 +4,7 @@ module Days.Day04 (runDay) where
 {- ORMOLU_DISABLE -}
 import Control.Lens
 import Data.Attoparsec.Text
+import Data.Ix (inRange)
 import Data.List
 import qualified Data.Map.Strict as Map
 import Data.Monoid
@@ -88,8 +89,9 @@ toStartCardCount = Map.fromList . map ((,) <$> view serialId <*> const 1)
 
 addCards :: Int -> Map.Map Int Int -> Int -> Map.Map Int Int
 addCards i counts w = itraversed
-  . ifiltered (\k v -> k > i && k <= i + w) %~ (Map.findWithDefault 0 i counts +)
-  $ counts
+  {- . ifiltered (\k v -> k > i && k <= i + w) -}
+  . ifiltered ((inRange (succ i, i+w) .) . const)
+  %~ (Map.findWithDefault 0 i counts +) $ counts
 
 toCountMap :: [Card] -> Map.Map Int Int
 toCountMap = ifoldl addCards <$> toStartCardCount <*> toWinMap
