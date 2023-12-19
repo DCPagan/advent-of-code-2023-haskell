@@ -89,7 +89,6 @@ toStartCardCount = Map.fromList . map ((,) <$> view serialId <*> const 1)
 
 addCards :: Int -> Map.Map Int Int -> Int -> Map.Map Int Int
 addCards i counts w = itraversed
-  {- . ifiltered (\k v -> k > i && k <= i + w) -}
   . ifiltered ((inRange (succ i, i+w) .) . const)
   %~ (Map.findWithDefault 0 i counts +) $ counts
 
