@@ -1,14 +1,14 @@
+{-# LANGUAGE TemplateHaskell #-}
 module Days.Day06 (runDay) where
 
 {- ORMOLU_DISABLE -}
+import Control.Applicative
+import Control.Arrow ((***))
+import Control.Lens
+import Data.Ix (rangeSize)
 import Data.List
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
 import Data.Maybe
-import Data.Set (Set)
-import qualified Data.Set as Set
-import Data.Vector (Vector)
-import qualified Data.Vector as Vec
+import Data.Text (Text)
 import qualified Util.Util as U
 
 import qualified Program.RunDay as R (runDay, Day)
@@ -16,23 +16,68 @@ import Data.Attoparsec.Text
 import Data.Void
 {- ORMOLU_ENABLE -}
 
-runDay :: R.Day
-runDay = R.runDay inputParser partA partB
-
------------- PARSER ------------
-inputParser :: Parser Input
-inputParser = error "Not implemented yet!"
-
 ------------ TYPES ------------
-type Input = Void
+data Race where
+  Race :: {
+    _time :: Int,
+    _dist :: Int
+  } -> Race
+  deriving (Eq, Show)
+makeLenses ''Race
 
-type OutputA = Void
+type Quadratic a = (a, a)
+
+type QuadraticRoots a = (a, a)
+
+type Input = [Race]
+
+type OutputA = Int
 
 type OutputB = Void
 
+------------ PARSER ------------
+parseLine :: Text -> Parser [Int]
+parseLine s = do
+  string s
+  char ':'
+  skipSpace
+  xs <- sepBy decimal skipSpace
+  endOfLine
+  return xs
+
+parseTime :: Parser [Int]
+parseTime = parseLine "Time"
+
+parseDistance :: Parser [Int]
+parseDistance = parseLine "Distance"
+
+parseRaces :: Parser [Race]
+parseRaces = zipWith Race <$> parseTime <*> parseDistance
+
+inputParser :: Parser Input
+inputParser = parseRaces
+
+runDay :: R.Day
+runDay = R.runDay inputParser partA partB
+
 ------------ PART A ------------
+-- The distance traveled in a race is a quadratic equation with respect to
+-- the time spent holding the button; the first coefficient is -1.
+toQuadratic :: Floating a => Race -> Quadratic a
+toQuadratic (Race t d) = (t, negate d) & each %~ fromIntegral
+
+-- Given that the distances are possible for each race, the roots of these
+-- quadratic equations are guaranteed to be real.
+solveQuadratic :: Floating a => Quadratic a -> QuadraticRoots a
+solveQuadratic (b, c) = ((b - d) / 2, (b + d) / 2)
+  where
+    d = sqrt $ b * b + 4 * c
+
+locusSize :: Race -> Int
+locusSize = rangeSize . (ceiling *** floor) . solveQuadratic . toQuadratic
+
 partA :: Input -> OutputA
-partA = error "Not implemented yet!"
+partA = product . map locusSize
 
 ------------ PART B ------------
 partB :: Input -> OutputB

@@ -9,14 +9,8 @@ import Data.Either
 import Data.Function
 import Data.Ix
 import Data.List
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
 import Data.Maybe
 import Data.Monoid
-import Data.Set (Set)
-import qualified Data.Set as Set
-import Data.Vector (Vector)
-import qualified Data.Vector as Vec
 import qualified Util.Util as U
 
 import qualified Program.RunDay as R (runDay, Day)
@@ -265,7 +259,8 @@ handleRight right f = maybe f
     (\r as bs -> f as (r:bs))
     (\r as bs -> f (r:as) bs)) right
 
-{- The second field comprises ranges composed between the former and latter
+{-
+ - The second field comprises ranges composed between the former and latter
  - maps.  The first field comprises ranges from the latter map not composed
  - with ranges from the former map.
  -}
