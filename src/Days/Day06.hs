@@ -3,7 +3,7 @@ module Days.Day06 (runDay) where
 
 {- ORMOLU_DISABLE -}
 import Control.Applicative
-import Control.Arrow ((***))
+import Control.Arrow ((***), (<<<))
 import Control.Lens
 import Data.Ix (rangeSize)
 import Data.List
@@ -33,7 +33,7 @@ type Input = [Race]
 
 type OutputA = Int
 
-type OutputB = Void
+type OutputB = Int
 
 ------------ PARSER ------------
 parseLine :: Text -> Parser [Int]
@@ -45,14 +45,14 @@ parseLine s = do
   endOfLine
   return xs
 
-parseTime :: Parser [Int]
-parseTime = parseLine "Time"
+parseTimes :: Parser [Int]
+parseTimes = parseLine "Time"
 
-parseDistance :: Parser [Int]
-parseDistance = parseLine "Distance"
+parseDistances :: Parser [Int]
+parseDistances = parseLine "Distance"
 
 parseRaces :: Parser [Race]
-parseRaces = zipWith Race <$> parseTime <*> parseDistance
+parseRaces = zipWith Race <$> parseTimes <*> parseDistances
 
 inputParser :: Parser Input
 inputParser = parseRaces
@@ -80,5 +80,11 @@ partA :: Input -> OutputA
 partA = product . map locusSize
 
 ------------ PART B ------------
+toStrings :: Race -> (String, String)
+toStrings (Race t d) = (show t, show d)
+
+fromStrings :: (String, String) -> Race
+fromStrings = uncurry Race . (each %~ read)
+
 partB :: Input -> OutputB
-partB = error "Not implemented yet!"
+partB = locusSize . fromStrings . mconcat . map toStrings
