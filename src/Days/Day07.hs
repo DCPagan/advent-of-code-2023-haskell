@@ -5,6 +5,8 @@ module Days.Day07 (runDay) where
 import Control.Applicative
 import Control.Lens
 import Control.Monad
+import Data.Function
+import Data.Functor.Contravariant
 import Data.List
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -52,6 +54,8 @@ instance Show Card where
   show Queen = "Q"
   show King = "K"
   show Ace = "A"
+  showList [] s = s
+  showList (c:cs) s = show c ++ showList cs s
 
 data HandType where
   HighCard :: HandType
@@ -95,7 +99,7 @@ type Input = [Bid]
 
 type OutputA = Int
 
-type OutputB = Void
+type OutputB = Int
 
 ------------ PARSER ------------
 parseCard :: Parser Card
@@ -119,7 +123,6 @@ getHandType :: [Card] -> HandType
 getHandType = mconcat . map (f . length) . group . sort
   where
     f :: Int -> HandType
-    f 0 = HighCard
     f 1 = HighCard
     f 2 = OnePair
     f 3 = ThreeOfAKind
@@ -146,8 +149,47 @@ runDay = R.runDay inputParser partA partB
 ------------ PART A ------------
 partA :: Input -> OutputA
 -- partA = error "Not implemented yet!"
-partA = sum . zipWith (*) (enumFrom 1) . toListOf (folded . bid) . sort
+partA = sum . zipWith (*) (enumFrom 1) . toListOf (traverse . bid) . sort
 
 ------------ PART B ------------
+getNewHandType :: [Card] -> HandType
+getNewHandType = mconcat . map (f . length)
+  . uncurry joinJacks
+  . (_2 %~ (sortBy (on (flip compare) length)) . group . sort)
+  . partition (Jack ==)
+  where
+    f :: Int -> HandType
+    f 1 = HighCard
+    f 2 = OnePair
+    f 3 = ThreeOfAKind
+    f 4 = FourOfAKind
+    f 5 = FiveOfAKind
+    joinJacks :: [Card] -> [[Card]] -> [[Card]]
+    joinJacks jacks [] = [jacks]
+    joinJacks jacks (c:cs) = (jacks ++ c) : cs
+
+newHand :: Hand -> Hand
+newHand h@Hand { _handtype, _cards } = h { _handtype = getNewHandType _cards }
+
+newCardCompare :: Card -> Card -> Ordering
+newCardCompare Jack Jack = EQ
+newCardCompare Jack a = LT
+newCardCompare a Jack = GT
+newCardCompare a b = compare a b
+
+newHandCompareByCards :: Hand -> Hand -> Ordering
+newHandCompareByCards = (mconcat .) . on (zipWith newCardCompare) (view cards)
+
+newHandCompareByType :: Hand -> Hand -> Ordering
+newHandCompareByType = on compare (view handtype)
+
+newHandCompare :: Hand -> Hand -> Ordering
+newHandCompare = getComparison $ on (<>) Comparison newHandCompareByType newHandCompareByCards
+
+newBidCompare :: Bid -> Bid -> Ordering
+newBidCompare = on newHandCompare (view hand)
+
 partB :: Input -> OutputB
-partB = error "Not implemented yet!"
+partB = sum . zipWith (*) (enumFrom 1)
+  . toListOf (traverse . bid) . sortBy newBidCompare
+  . over (traverse . hand) newHand
