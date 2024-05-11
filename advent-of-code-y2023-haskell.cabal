@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 2e74ae3e3fe2755a3deedbb1fe66777b8ce227c125be710aaa1e05efbf0acc4e
+-- hash: 8aba72fac8e32812387e9b83ef577b0c9e4f3825736a9ac7f45ecf4a12865ce9
 
 name:           advent-of-code-y2023-haskell
 version:        2023.0
@@ -80,6 +80,7 @@ library
     , parser-combinators
     , text
     , time
+    , unordered-containers
     , vector
   default-language: Haskell2010
 
@@ -111,5 +112,6 @@ executable advent-of-code-y2023-haskell-exe
     , parser-combinators
     , text
     , time
+    , unordered-containers
     , vector
   default-language: Haskell2010
