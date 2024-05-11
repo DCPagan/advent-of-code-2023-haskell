@@ -184,7 +184,9 @@ newHandCompareByType :: Hand -> Hand -> Ordering
 newHandCompareByType = on compare (view handtype)
 
 newHandCompare :: Hand -> Hand -> Ordering
-newHandCompare = getComparison $ on (<>) Comparison newHandCompareByType newHandCompareByCards
+newHandCompare = getComparison
+  $ (contramap _handtype defaultComparison)
+    <> (Comparison newHandCompareByCards)
 
 newBidCompare :: Bid -> Bid -> Ordering
 newBidCompare = on newHandCompare (view hand)
