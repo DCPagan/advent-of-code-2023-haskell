@@ -18,7 +18,7 @@ import Data.Void
 ------------ TYPES ------------
 data OasisF a b where
   Zero :: OasisF a b
-  Reading :: a -> b -> OasisF a b
+  Reading :: a -> a -> b -> OasisF a b
   deriving (Eq, Show, Functor)
 
 type Oasis a = Fix (OasisF a)
@@ -46,15 +46,19 @@ diffs :: [Int] -> OasisF Int [Int]
 diffs [] = Zero
 diffs x
   | all (0 ==) x = Zero
-  | otherwise = Reading <$> head <*> (zipWith (-) <*> tail) $ x
+  | otherwise = Reading <$> head <*> last <*> (zipWith (-) <*> tail) $ x
 
 next :: OasisF Int Int -> Int
 next Zero = 0
-next (Reading a b) = a + b
+next (Reading a _ c) = a + c
 
 partA :: Input -> OutputA
 partA = auf (_Wrapping Sum) (foldMapOf traverse) (refold next diffs)
 
 ------------ PART B ------------
+prev :: OasisF Int Int -> Int
+prev Zero = 0
+prev (Reading _ b c) = b - c
+
 partB :: Input -> OutputB
-partB = error "Not implemented yet!"
+partB = auf (_Wrapping Sum) (foldMapOf traverse) (refold prev diffs)
