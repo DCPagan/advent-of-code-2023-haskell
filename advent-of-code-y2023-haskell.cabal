@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 8aba72fac8e32812387e9b83ef577b0c9e4f3825736a9ac7f45ecf4a12865ce9
+-- hash: 5ea3f7f1dabaf22209935909e23a197e4e36e181d26f1becc93dd3cb5705f8bc
 
 name:           advent-of-code-y2023-haskell
 version:        2023.0
@@ -72,6 +72,7 @@ library
     , attoparsec
     , base >=4.7 && <5
     , containers
+    , data-fix
     , directory
     , lens
     , mtl
@@ -104,6 +105,7 @@ executable advent-of-code-y2023-haskell-exe
     , attoparsec
     , base >=4.7 && <5
     , containers
+    , data-fix
     , directory
     , lens
     , mtl
