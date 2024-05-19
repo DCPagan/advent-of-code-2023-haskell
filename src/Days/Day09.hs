@@ -1,38 +1,59 @@
+{-# LANGUAGE DeriveFunctor #-}
 module Days.Day09 (runDay) where
 
 {- ORMOLU_DISABLE -}
+import Control.Applicative
+import Control.Lens
+import Data.Fix
 import Data.List
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
 import Data.Maybe
-import Data.Set (Set)
-import qualified Data.Set as Set
-import Data.Vector (Vector)
-import qualified Data.Vector as Vec
+import Data.Monoid
 import qualified Util.Util as U
 
 import qualified Program.RunDay as R (runDay, Day)
-import Data.Attoparsec.Text
+import Data.Attoparsec.Text as P
 import Data.Void
 {- ORMOLU_ENABLE -}
+
+------------ TYPES ------------
+data OasisF a b where
+  Zero :: OasisF a b
+  Reading :: a -> b -> OasisF a b
+  deriving (Eq, Show, Functor)
+
+type Oasis a = Fix (OasisF a)
+
+type Input = [[Int]]
+
+type OutputA = Int
+
+type OutputB = Int
+
+------------ PARSER ------------
+parseOasisReading :: Parser [Int]
+parseOasisReading = reverse
+  <$> P.sepBy (P.signed P.decimal) (P.takeWhile P.isHorizontalSpace)
+  <* P.endOfLine
+
+inputParser :: Parser Input
+inputParser = many parseOasisReading
 
 runDay :: R.Day
 runDay = R.runDay inputParser partA partB
 
------------- PARSER ------------
-inputParser :: Parser Input
-inputParser = error "Not implemented yet!"
-
------------- TYPES ------------
-type Input = Void
-
-type OutputA = Void
-
-type OutputB = Void
-
 ------------ PART A ------------
+diffs :: [Int] -> OasisF Int [Int]
+diffs [] = Zero
+diffs x
+  | all (0 ==) x = Zero
+  | otherwise = Reading <$> head <*> (zipWith (-) <*> tail) $ x
+
+next :: OasisF Int Int -> Int
+next Zero = 0
+next (Reading a b) = a + b
+
 partA :: Input -> OutputA
-partA = error "Not implemented yet!"
+partA = auf (_Wrapping Sum) (foldMapOf traverse) (refold next diffs)
 
 ------------ PART B ------------
 partB :: Input -> OutputB

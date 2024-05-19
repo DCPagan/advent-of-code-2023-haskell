@@ -23,6 +23,7 @@ dependencies:
 - attoparsec
 - base >= 4.7 && < 5
 - containers
+- data-fix
 - directory
 - lens
 - mtl
