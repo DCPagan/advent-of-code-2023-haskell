@@ -19,12 +19,15 @@ extra-source-files:
 description:         A template for Advent of Code projects in Haskell
 
 dependencies:
+- adjunctions
 - ansi-terminal
+- array
 - attoparsec
 - base >= 4.7 && < 5
 - containers
 - data-fix
 - directory
+- distributive
 - lens
 - mtl
 - optparse-applicative
@@ -38,34 +41,35 @@ dependencies:
 library:
   source-dirs: src
   default-extensions:
-    - LambdaCase
-    - MultiWayIf
-    - RecordWildCards
-    - OverloadedStrings
-    - GADTs
-    - GHC2021
+  - GADTs
+  - GHC2021
+  - LambdaCase
+  - MultiWayIf
+  - OverloadedStrings
+  - RecordWildCards
 
 executables:
   advent-of-code-y2023-haskell-exe:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
-    - -threaded
+    - -fexcess-precision
+    - -funfolding-use-threshold=16
+    - -O2
+    - -optc-ffast-math
+    - -optc-O3
     - -rtsopts
+    - -threaded
+    - -with-rtsopts=-C0
     - -with-rtsopts=-N4
     - -with-rtsopts=-qa
-    - -with-rtsopts=-C0
-    - -funfolding-use-threshold=16
-    - -fexcess-precision
-    - -optc-O3
-    - -optc-ffast-math
-    - -O2
     default-extensions:
-    - LambdaCase
-    - MultiWayIf
-    - RecordWildCards
-    - OverloadedStrings
     - GADTs
     - GHC2021
+    - LambdaCase
+    - MultiWayIf
+    - OverloadedStrings
+    - RecordWildCards
+    - TypeApplications
     dependencies:
     - advent-of-code-y2023-haskell
