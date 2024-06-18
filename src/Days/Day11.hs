@@ -1,6 +1,5 @@
 module Days.Day11 (runDay) where
 
-{- ORMOLU_DISABLE -}
 import Data.List
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -14,7 +13,6 @@ import qualified Util.Util as U
 import qualified Program.RunDay as R (runDay, Day)
 import Data.Attoparsec.Text
 import Data.Void
-{- ORMOLU_ENABLE -}
 
 runDay :: R.Day
 runDay = R.runDay inputParser partA partB

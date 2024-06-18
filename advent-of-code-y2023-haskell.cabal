@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 5ea3f7f1dabaf22209935909e23a197e4e36e181d26f1becc93dd3cb5705f8bc
+-- hash: 72f30f5ab754e0fa4af3de5b7cbda153085ed87430fee7386d4c8e5b6cefec06
 
 name:           advent-of-code-y2023-haskell
 version:        2023.0
@@ -61,19 +61,22 @@ library
   hs-source-dirs:
       src
   default-extensions:
-      LambdaCase
-      MultiWayIf
-      RecordWildCards
-      OverloadedStrings
       GADTs
       GHC2021
+      LambdaCase
+      MultiWayIf
+      OverloadedStrings
+      RecordWildCards
   build-depends:
-      ansi-terminal
+      adjunctions
+    , ansi-terminal
+    , array
     , attoparsec
     , base >=4.7 && <5
     , containers
     , data-fix
     , directory
+    , distributive
     , lens
     , mtl
     , optparse-applicative
@@ -92,21 +95,25 @@ executable advent-of-code-y2023-haskell-exe
   hs-source-dirs:
       app
   default-extensions:
-      LambdaCase
-      MultiWayIf
-      RecordWildCards
-      OverloadedStrings
       GADTs
       GHC2021
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N4 -with-rtsopts=-qa -with-rtsopts=-C0 -funfolding-use-threshold=16 -fexcess-precision -optc-O3 -optc-ffast-math -O2
+      LambdaCase
+      MultiWayIf
+      OverloadedStrings
+      RecordWildCards
+      TypeApplications
+  ghc-options: -fexcess-precision -funfolding-use-threshold=16 -O2 -optc-ffast-math -optc-O3 -rtsopts -threaded -with-rtsopts=-C0 -with-rtsopts=-N4 -with-rtsopts=-qa
   build-depends:
-      advent-of-code-y2023-haskell
+      adjunctions
+    , advent-of-code-y2023-haskell
     , ansi-terminal
+    , array
     , attoparsec
     , base >=4.7 && <5
     , containers
     , data-fix
     , directory
+    , distributive
     , lens
     , mtl
     , optparse-applicative
