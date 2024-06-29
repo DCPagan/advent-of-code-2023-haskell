@@ -47,6 +47,7 @@ library:
   - MultiWayIf
   - OverloadedStrings
   - RecordWildCards
+  - TypeFamilies
 
 executables:
   advent-of-code-y2023-haskell-exe:

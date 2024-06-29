@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 72f30f5ab754e0fa4af3de5b7cbda153085ed87430fee7386d4c8e5b6cefec06
+-- hash: 254d441aa67cc81690c0f09de6bd09758776caeb538257319ee1f31e9e4593c3
 
 name:           advent-of-code-y2023-haskell
 version:        2023.0
@@ -67,6 +67,7 @@ library
       MultiWayIf
       OverloadedStrings
       RecordWildCards
+      TypeFamilies
   build-depends:
       adjunctions
     , ansi-terminal
