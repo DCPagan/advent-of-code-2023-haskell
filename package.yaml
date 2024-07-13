@@ -41,12 +41,17 @@ dependencies:
 library:
   source-dirs: src
   default-extensions:
+  - AllowAmbiguousTypes
+  - DataKinds
   - GADTs
   - GHC2021
   - LambdaCase
   - MultiWayIf
+  - PolyKinds
   - OverloadedStrings
   - RecordWildCards
+  - ScopedTypeVariables
+  - TypeApplications
   - TypeFamilies
 
 executables:
