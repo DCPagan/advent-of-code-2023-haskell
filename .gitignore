@@ -3,5 +3,6 @@ dist-newstyle/
 
 *~
 *.cabal
-stack.yaml.lock
 .gitattributes
+.ghci
+stack.yaml.lock

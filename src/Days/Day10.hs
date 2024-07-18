@@ -1,16 +1,22 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Days.Day10 (runDay) where
 
+import Control.Arrow
 import Control.Lens hiding (uncons)
 import Control.Monad
 import Data.Array.IArray
+import Data.Attoparsec.Text (Parser, takeText)
 import Data.Distributive
 import Data.Fix
 import Data.Function
@@ -21,15 +27,13 @@ import Data.Functor.Rep
 import Data.List
 import Data.Maybe
 import Data.Monoid
+import Data.Proxy
 import GHC.Num.Natural (naturalFromWord, naturalToWord)
 import GHC.TypeNats
-import qualified Util.Util as U
 
-import qualified Program.RunDay as R (runDay, Day)
-import Data.Attoparsec.Text (Parser, takeText)
 import qualified Data.Text as T
-import Control.Monad.Representable.Reader (distributeRep, collectRep)
-import Control.Arrow
+import qualified Program.RunDay as R (runDay, Day)
+import qualified Util.Util as U
 
 ------------ TYPES ------------
 data MazeTile where
@@ -59,23 +63,23 @@ knownNatToWord = naturalToWord $ fromSNat @n natSing
 knownNatToWord' :: forall n. (KnownNat n) => Word
 knownNatToWord' = naturalToWord $ fromSNat @n natSing - 1
 
-class (KnownNat len, KnownNat wid) => D2Bound len wid where
+class D2Bound len wid where
   d2Length :: Word
-  d2Length = knownNatToWord @len
   d2Width :: Word
-  d2Width = knownNatToWord @wid
   northBound :: Word
-  northBound = 0
   eastBound :: Word
-  eastBound = knownNatToWord' @wid
   southBound :: Word
-  southBound = knownNatToWord' @len
   westBound :: Word
-  westBound = 0
   d2Bounds :: ((Word, Word), (Word, Word))
-  d2Bounds = ((0, 0), (knownNatToWord' @len, knownNatToWord' @wid))
 
-instance (KnownNat len, KnownNat wid) => D2Bound len wid
+instance (KnownNat len, KnownNat wid) => D2Bound len wid where
+  d2Length = knownNatToWord @len
+  d2Width = knownNatToWord @wid
+  northBound = 0
+  eastBound = knownNatToWord' @wid
+  southBound = knownNatToWord' @len
+  westBound = 0
+  d2Bounds = ((0, 0), (knownNatToWord' @len, knownNatToWord' @wid))
 
 data CoordF (len :: Nat) (wid :: Nat) a where
   CoordF :: {
@@ -220,7 +224,7 @@ findAtCoord :: forall len wid a. (D2Bound len wid) =>
 findAtCoord text CoordF {..} = toTile $ T.index text $ fromIntegral
   $ succ (d2Width @len @wid) * _y + _x
 
-findFirstStep :: forall {len :: Nat} {wid :: Nat}. (D2Bound len wid) =>
+findFirstStep :: forall len wid. (D2Bound len wid) =>
   Maze len wid -> Step len wid -> Direction
 findFirstStep maze coord = fromMaybe Stop . find (/= Stop)
   . fmap (peek maze . (coord $>) >>= turn) $ enumFrom minBound

@@ -43,16 +43,20 @@ library:
   default-extensions:
   - AllowAmbiguousTypes
   - DataKinds
+  - FlexibleInstances
   - GADTs
   - GHC2021
   - LambdaCase
+  - MultiParamTypeClasses
   - MultiWayIf
   - PolyKinds
   - OverloadedStrings
+  - Rank2Types
   - RecordWildCards
   - ScopedTypeVariables
   - TypeApplications
   - TypeFamilies
+  - UndecidableInstances
 
 executables:
   advent-of-code-y2023-haskell-exe:
