@@ -131,6 +131,10 @@ instance (D2Bound len wid) =>
   distribute = distributeRep
   collect = collectRep
 
+type Path len wid a = [CoordF len wid a]
+type Latitude len wid a = [CoordF len wid a]
+type ScanCrossCoords len wid = [CoordF len wid MazeTile]
+
 type Input = MazeStart'
 
 type OutputA = Word
@@ -251,9 +255,6 @@ parseMaze = do
 inputParser :: Parser Input
 inputParser = parseMaze
 
-runDay :: R.Day
-runDay = R.runDay parseMaze partA partB
-
 ------------ PART A ------------
 stepAndTurn :: (D2Bound len wid) =>
   Maze len wid -> Step len wid -> Step len wid
@@ -272,6 +273,14 @@ partA MazeStart { maze, start } =
   flip div 2 $ fromIntegral $ length $ mazePath maze start
 
 ------------ PART B ------------
+data ScanCross where
+  ScanCross :: {
+    _isTangent :: Bool,
+    _west :: Word,
+    _east :: Word
+  }-> ScanCross
+makeLenses ''ScanCross
+
 areHorizontallyContinuousTiles :: MazeTile -> MazeTile -> Bool
 areHorizontallyContinuousTiles a b =
   turn a West /= Stop && turn b East /= Stop
@@ -287,23 +296,34 @@ isHorizontallyContinuous a b =
     | otherwise -> False
 
 partitionLatitudes :: (D2Bound len wid) =>
-  [CoordF len wid a] -> [[CoordF len wid a]]
+  Path len wid a -> [Latitude len wid a]
 partitionLatitudes = groupBy (on (==) _y) . sortBy (getComparison $
   contramap _y defaultComparison <> contramap _x defaultComparison)
 
 groupLatitude :: (D2Bound len wid) =>
-  [CoordF len wid MazeTile] -> [[CoordF len wid MazeTile]]
+  Latitude len wid MazeTile -> [ScanCrossCoords len wid]
 groupLatitude = foldr (\a as -> case Data.List.uncons as of
   Nothing -> [[a]]
   Just (b, bs) -> if isHorizontallyContinuous a (head b)
     then (a:b):bs
     else [a]:as) []
 
-isTangent :: (D2Bound len wid) =>
-  [CoordF len wid MazeTile] -> Bool
-isTangent = maybe False (\(a, b) -> turn a West == turn b East)
-  <<< fmap (each %~ _z) . traverse (fmap snd . unsnoc)
-  <=< uncons
+-- Return the head and last element of a list
+headLast :: [a] -> Maybe (a, a)
+headLast = uncons >=> traverse (fmap snd . unsnoc) . (fst &&& uncurry (:))
+
+isTangentPair :: (D2Bound len wid) =>
+  (CoordF len wid MazeTile, CoordF len wid MazeTile) -> Bool
+isTangentPair (a, b) =  a /= b && turn (_z a) West == turn (_z b) East
+
+toScanCross :: (D2Bound len wid) => ScanCrossCoords len wid -> Maybe ScanCross
+toScanCross = fmap
+  (\pair@(a, b) -> ScanCross {
+    _isTangent = isTangentPair pair,
+    _west = _x a,
+    _east = _x b
+  })
+  . headLast
 
 -- List hylomorphism
 hylo' :: (Maybe (c, b) -> b) -> (a -> Maybe (c, a)) -> a -> b
@@ -330,32 +350,34 @@ dropWhile1 p = para' $ \case
 takeDropWhile1 :: (a -> Bool) -> [a] -> ([a], [a])
 takeDropWhile1 p = takeWhile1 p &&& dropWhile1 p
 
-scanLatitude :: (D2Bound len wid) =>
-  [[CoordF len wid MazeTile]] -> Word
-scanLatitude = hylo' alg coalg
+scanLatitudeArea :: [ScanCross] -> Word
+scanLatitudeArea = hylo' alg coalg
   where
-    alg :: (D2Bound len wid) =>
-      Maybe ([[CoordF len wid MazeTile]], Word) -> Word
+    alg :: Maybe ([ScanCross], Word) -> Word
     alg = \case
       Nothing -> 0
       Just (segments, totalLength) -> gapLengths segments + totalLength
     gapLengths = sum <<<
-      zipWith (\a b -> (_x . head $ b) - (_x . last $ a) - 1) <*> tail
-    coalg :: (D2Bound len wid) =>
-      [[CoordF len wid MazeTile]] ->
-        Maybe ([[CoordF len wid MazeTile]], [[CoordF len wid MazeTile]])
-    coalg = fmap (uncurry (first . (:)) . second (takeDropWhile1 isTangent))
-      . uncons . dropWhile isTangent
+      zipWith (\a b -> _west b - _east a - 1) <*> tail
+    coalg :: [ScanCross] -> Maybe ([ScanCross], [ScanCross])
+    coalg = fmap (uncurry (first . (:)) . second (takeDropWhile1 _isTangent))
+      . uncons . dropWhile _isTangent
+
+scanLatitude :: (D2Bound len wid) => Latitude len wid MazeTile -> Word
+scanLatitude = scanLatitudeArea . mapMaybe toScanCross . groupLatitude
 
 coordWithTile :: (D2Bound len wid) =>
   Maze len wid -> CoordF len wid a -> CoordF len wid MazeTile
 coordWithTile maze = ($>) <*> indexAdjunction maze
 
 pathWithTiles :: (D2Bound len wid) =>
-  Maze len wid -> Step len wid -> [CoordF len wid MazeTile]
+  Maze len wid -> Step len wid -> Path len wid MazeTile
 pathWithTiles maze = fmap (coordWithTile maze) . mazePath maze
 
 partB :: Input -> OutputB
 partB MazeStart { maze, start } =
-  auf (_Wrapping Sum) (foldMapOf traverse) (scanLatitude . groupLatitude)
+  auf (_Wrapping Sum) (foldMapOf traverse) scanLatitude
     . partitionLatitudes $ pathWithTiles maze start
+
+runDay :: R.Day
+runDay = R.runDay parseMaze partA partB
