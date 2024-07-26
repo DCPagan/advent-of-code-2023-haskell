@@ -18,16 +18,14 @@ import Control.Monad
 import Data.Array.IArray
 import Data.Attoparsec.Text (Parser, takeText)
 import Data.Distributive
-import Data.Fix
 import Data.Function
 import Data.Functor
-import Data.Functor.Contravariant
 import Data.Functor.Adjunction
+import Data.Functor.Contravariant
 import Data.Functor.Rep
 import Data.List
 import Data.Maybe
 import Data.Monoid
-import Data.Proxy
 import GHC.Num.Natural (naturalFromWord, naturalToWord)
 import GHC.TypeNats
 
@@ -101,6 +99,24 @@ makeLenses ''MazeF
 instance (D2Bound len wid) => Show (MazeF len wid a) where
   show _ = "maze"
 
+instance (D2Bound len wid) =>
+  Adjunction (CoordF len wid) (MazeF len wid) where
+  unit _z = MazeF $ genArray (d2Bounds @len @wid) $ \(_y, _x) -> CoordF {..}
+  counit CoordF {..} = unMazeF _z ! (_y, _x)
+  leftAdjunct f _z = MazeF $ genArray (d2Bounds @len @wid) $ \(_y, _x) -> f CoordF {..}
+  rightAdjunct f CoordF {..} = unMazeF (f _z) ! (_y, _x)
+
+instance (D2Bound len wid) =>
+  Representable (MazeF len wid) where
+  type Rep (MazeF len wid) = Coord len wid
+  tabulate = tabulateAdjunction
+  index = indexAdjunction
+
+instance (D2Bound len wid) =>
+  Distributive (MazeF len wid) where
+  distribute = distributeRep
+  collect = collectRep
+
 data MazeStart a b where
   MazeStart :: forall len wid a b. (D2Bound len wid) => {
     maze :: MazeF len wid a,
@@ -112,24 +128,6 @@ instance Show (MazeStart a b) where
 
 type Maze len wid = MazeF len wid MazeTile
 type MazeStart' = MazeStart MazeTile Direction
-
-instance (D2Bound len wid) =>
-  Adjunction (CoordF len wid) (MazeF len wid) where
-  unit _z = MazeF $ genArray (d2Bounds @len @wid) $ \(_x, _y) -> CoordF {..}
-  counit CoordF {..} = unMazeF _z ! (_x, _y)
-  leftAdjunct f _z = MazeF $ genArray (d2Bounds @len @wid) $ \(_x, _y) -> f CoordF {..}
-  rightAdjunct f CoordF {..} = unMazeF (f _z) ! (_x, _y)
-
-instance (D2Bound len wid) =>
-  Representable (MazeF len wid) where
-  type Rep (MazeF len wid) = CoordF len wid ()
-  tabulate = tabulateAdjunction
-  index = indexAdjunction
-
-instance (D2Bound len wid) =>
-  Distributive (MazeF len wid) where
-  distribute = distributeRep
-  collect = collectRep
 
 type Path len wid a = [CoordF len wid a]
 type Latitude len wid a = [CoordF len wid a]
@@ -269,8 +267,7 @@ mazePath maze = unfoldr $ \step@CoordF{..} -> if _z == Stop
   else Just (step, stepAndTurn maze step)
 
 partA :: Input -> OutputA
-partA MazeStart { maze, start } =
-  flip div 2 $ fromIntegral $ length $ mazePath maze start
+partA MazeStart {..} = flip div 2 $ fromIntegral $ length $ mazePath maze start
 
 ------------ PART B ------------
 data ScanCross where
@@ -278,7 +275,7 @@ data ScanCross where
     _isTangent :: Bool,
     _west :: Word,
     _east :: Word
-  }-> ScanCross
+  } -> ScanCross
 makeLenses ''ScanCross
 
 areHorizontallyContinuousTiles :: MazeTile -> MazeTile -> Bool
@@ -375,9 +372,8 @@ pathWithTiles :: (D2Bound len wid) =>
 pathWithTiles maze = fmap (coordWithTile maze) . mazePath maze
 
 partB :: Input -> OutputB
-partB MazeStart { maze, start } =
-  auf (_Wrapping Sum) (foldMapOf traverse) scanLatitude
-    . partitionLatitudes $ pathWithTiles maze start
+partB MazeStart {..} = auf (_Wrapping Sum) (foldMapOf traverse) scanLatitude
+  . partitionLatitudes $ pathWithTiles maze start
 
 runDay :: R.Day
 runDay = R.runDay parseMaze partA partB
