@@ -10,12 +10,18 @@
 module Days.Day12 (runDay) where
 
 import           Control.Applicative
-import           Control.Lens
-import           Data.Attoparsec.Text hiding (take)
+import           Control.Arrow
+import           Control.Monad.Codensity
+import           Control.Lens hiding (cons, snoc, uncons, unsnoc)
+import           Control.Monad
+import           Data.Attoparsec.Text hiding (Fail, take)
 import           Data.Coerce
 import           Data.Fix
+import           Data.Function
 import           Data.Functor
 import           Data.List
+import           Data.List.Extra
+import           Data.List.NonEmpty (NonEmpty((:|)), nonEmpty, toList)
 import           Data.Maybe
 import           Data.Monoid
 import           Data.Void
@@ -23,6 +29,8 @@ import           GHC.Read
 import qualified Text.ParserCombinators.ReadPrec as RP
 import qualified Program.RunDay as R (runDay, Day)
 import qualified Util.Util as U
+import           Data.Text.Internal.Fusion.Types (RS(RS0))
+import           Data.Bifunctor.TH (deriveBifunctor)
 
 ------------ TYPES ------------
 data SpringCondition where
@@ -63,31 +71,142 @@ data ConditionRecord where
 
 makeLenses ''ConditionRecord
 
-data SpringTrieF a b where
-  Tip :: SpringTrieF a b
-  Leaf :: a -> SpringTrieF a b
-  NextDamaged :: Word -> b -> SpringTrieF a b
-  NextOperational :: Word -> b -> SpringTrieF a b
-  NextUnknown :: Word -> b -> b -> SpringTrieF a b
-  deriving (Eq, Ord, Show, Functor)
+data SpringParserF a where
+  Fail :: SpringParserF a
+  GetCondition :: (SpringCondition -> SpringParserF a) -> SpringParserF a
+  GetGroup :: (Word -> SpringParserF a) -> SpringParserF a
+  Bifurcate :: SpringParserF a -> SpringParserF a -> SpringParserF a
+  Look :: (ConditionRecord -> SpringParserF a) -> SpringParserF a
+  Result :: a -> SpringParserF a -> SpringParserF a
+  Final :: NonEmpty (a, ConditionRecord) -> SpringParserF a
+  deriving (Functor)
 
-type SpringTrie a = Fix (SpringTrieF a)
+instance Applicative SpringParserF where
+  pure x = Result x Fail
 
-type Algebra f a = f a -> a
+  (<*>) = ap
 
-type Coalgebra f a = a -> f a
+instance Monad SpringParserF => Monad SpringParserF where
+  Fail >>= _ = Fail
+  GetCondition f >>= k = GetCondition (f >=> k)
+  GetGroup f >>= k = GetGroup (f >=> k)
+  Bifurcate p q >>= k = Bifurcate (p >>= k) (q >>= k)
+  Look f >>= k = Look (f >=> k)
+  Result x p >>= k = k x <|> (p >>= k)
+  Final rs >>= k = final $ toList rs >>= uncurry (run . k)
 
-type SpringAlgebra a b = Algebra (SpringTrieF a) b
+instance Alternative SpringParserF where
+  empty = Fail
 
-type SpringCoalgebra a b = Coalgebra (SpringTrieF a) b
+  GetCondition f <|> GetCondition g = GetCondition $ uncurry (<|>) <<< f &&& g
+  GetGroup f <|> GetGroup g = GetGroup $ uncurry (<|>) <<< f &&& g
+  Result x p <|> q = Result x (p <|> q)
+  p <|> Result x q = Result x (p <|> q)
+  Fail <|> p = p
+  p <|> Fail = p
+  Final r <|> Final s = Final (r <> s)
+  Final r <|> p = Look $ Final . maybe r (r <>) . nonEmpty . run p
+  p <|> Final r = Look $ Final . maybe r (<> r) . nonEmpty . run p
+  Look f <|> Look g = Look $ uncurry (<|>) <<< f &&& g
+  Look f <|> p = Look $ (<|> p) . f
+  p <|> Look f = Look $ (p <|>) . f
+  GetCondition f <|> GetGroup g = Bifurcate (GetCondition f) (GetGroup g)
+  GetGroup g <|> GetCondition f = Bifurcate (GetCondition f) (GetGroup g)
+  Bifurcate p q <|> Bifurcate r s = Bifurcate (Bifurcate p r) (Bifurcate q s)
+  Bifurcate p q <|> r = Bifurcate (p <|> r) (q <|> r)
+  r <|> Bifurcate p q = Bifurcate (r <|> p) (r <|> q)
+
+instance MonadPlus SpringParserF
+
+instance MonadFail SpringParserF where
+  fail = const Fail
+
+type SpringParser = Codensity SpringParserF
+
+instance (Show a) => Show (SpringParserF a) where
+  show Fail = "Fail"
+  show (GetCondition _) = "GetCondition"
+  show (GetGroup _) = "GetGroup"
+  show (Bifurcate p q) = "Bifurcate " ++ show p ++ " " ++ show q
+  show (Look _) = "Look"
+  show (Result x p) = "Result: " ++ show x ++ " " ++ show p
+  show (Final r) = "Final: " ++ show r
 
 type Input = [ConditionRecord]
 
 type OutputA = Word
 
-type OutputB = Void
+type OutputB = Word
 
 ------------ PARSER ------------
+emptyRecord :: ConditionRecord
+emptyRecord = ConditionRecord { _row = [], _groups = [] }
+
+final :: [(a, ConditionRecord)] -> SpringParserF a
+final = maybe Fail Final . nonEmpty
+
+run :: SpringParserF a -> ConditionRecord -> [(a, ConditionRecord)]
+run (GetCondition f) cr@ConditionRecord { _row = c:cs } =
+  run (f c) cr { _row = cs }
+run (GetGroup f) cr@ConditionRecord { _groups = g:gs } =
+  run (f g) cr { _groups = gs }
+run (Bifurcate p q) cr = run p cr ++ run q cr
+run (Look f) cr = run (f cr) cr
+run (Result x p) cr = (x, cr):run p cr
+run (Final (r :| rs)) _ = r:rs
+run _ _ = []
+
+runSprings :: SpringParser a -> ConditionRecord -> [(a, ConditionRecord)]
+runSprings = run . lowerCodensity
+
+getCondition :: SpringParser SpringCondition
+getCondition = Codensity GetCondition
+
+getGroup :: SpringParser Word
+getGroup = Codensity GetGroup
+
+look :: SpringParser ConditionRecord
+look = Codensity Look
+
+satisfyCondition :: (SpringCondition -> Bool) -> SpringParser SpringCondition
+satisfyCondition p = do
+  x <- getCondition
+  if p x
+    then return x
+    else empty
+
+eof :: SpringParser ()
+eof = do
+  ConditionRecord { .. } <- look
+  unless (null _row) empty
+
+getDamaged :: SpringParser SpringCondition
+getDamaged = satisfyCondition (\x -> x == Damaged || x == Unknown) $> Damaged
+
+getOperational :: SpringParser SpringCondition
+getOperational = satisfyCondition (\x -> x == Operational || x == Unknown)
+  $> Operational
+
+getDamageds :: SpringParser [SpringCondition]
+getDamageds = do
+  g <- getGroup
+  ds <- replicateM (fromIntegral g) getDamaged
+  os <- eof $> [] <|> getOperationals
+  return $ ds ++ os
+
+getOperationals :: SpringParser [SpringCondition]
+getOperationals = singleton <$> getOperational
+
+getUnknowns :: SpringParser [SpringCondition]
+getUnknowns = getDamageds <|> getOperationals
+
+getAllSprings :: SpringParser [SpringCondition]
+getAllSprings = join <$> many getUnknowns
+
+parseSprings :: ConditionRecord -> [[SpringCondition]]
+parseSprings =
+  map fst . filter ((emptyRecord ==) . snd) . runSprings getAllSprings
+
 springCondition :: Parser SpringCondition
 springCondition =
   char '#' $> Damaged <|> char '.' $> Operational <|> char '?' $> Unknown
@@ -104,78 +223,23 @@ inputParser :: Parser Input
 inputParser = many conditionRecord
 
 ------------ PART A ------------
-springTrieAlg :: SpringAlgebra () Word
-springTrieAlg = \case
-  Tip -> 0
-  Leaf _ -> 1
-  NextDamaged _ x -> x
-  NextOperational _ y -> y
-  NextUnknown _ x y -> x + y
-
-springTrieCoalg :: SpringCoalgebra () ConditionRecord
-springTrieCoalg ConditionRecord { .. } = case _row of
-  []   -> case _groups of
-    [] -> Leaf ()
-    _  -> Tip
-  s:ss -> case _groups of
-    [] -> if elem Damaged _row
-          then Tip
-          else done
-    l:ls -> case s of
-      Damaged     -> if canHaveDamagedSequence l _row
-                     then NextDamaged l damaged
-                     else Tip
-      Operational -> NextOperational 1 operational
-      Unknown     -> if canHaveDamagedSequence l _row
-                     then NextUnknown l damaged operational
-                     else NextOperational 1 operational
-      Error       -> Tip
-      where
-        operational = ConditionRecord { _row = ss, .. }
-
-        damaged = ConditionRecord { _row = replaceHead rest, _groups = ls }
-
-        rest = drop (fromIntegral l) _row
-
-        replaceHead [] = []
-        replaceHead (_:xs) = Operational:xs
-  where
-    done = NextOperational
-      (fromIntegral $ length _row)
-      ConditionRecord { _row = [], _groups = [] }
-
-canHaveDamagedSequence :: Word -> [SpringCondition] -> Bool
-canHaveDamagedSequence l springs = i <= length springs
-  && maybe True (> 0) (elemIndex Damaged $ drop i springs)
-  && maybe True (>= i) (elemIndex Operational springs)
-  where
-    i = fromIntegral l
-
-countInputs :: ConditionRecord -> Word
-countInputs = refold springTrieAlg springTrieCoalg
-
-possibleInputs :: ConditionRecord -> [[SpringCondition]]
-possibleInputs = catMaybes . refold alg springTrieCoalg
-  where
-    alg
-      :: SpringTrieF () [Maybe [SpringCondition]] -> [Maybe [SpringCondition]]
-    alg = \case
-      Tip -> [Nothing]
-      Leaf _ -> [Just []]
-      NextDamaged x ls
-        -> (fmap . fmap) (replicate (fromIntegral x) Damaged ++) ls
-      NextOperational y rs
-        -> (fmap . fmap) (replicate (fromIntegral y) Operational ++) rs
-      NextUnknown x ls rs
-        -> (fmap . fmap) (replicate (fromIntegral x) Damaged ++) ls
-        ++ (fmap . fmap) (Operational:) rs
+countParses :: ConditionRecord -> Word
+countParses = fromIntegral . length . parseSprings
 
 partA :: Input -> OutputA
-partA = getSum . foldMap (coerce . countInputs)
+partA = getSum . foldMap (coerce . countParses)
 
 ------------ PART B ------------
+duplicate :: Int -> ConditionRecord -> ConditionRecord
+duplicate n =
+  row %~ intercalate [Unknown] . replicate n <<< groups %~ concat . replicate n
+
+quintuple :: ConditionRecord -> ConditionRecord
+quintuple = duplicate 5
+
 partB :: Input -> OutputB
-partB = error "Unimplemented"
+-- partB = error "Unimplemented"
+partB = partA <<< fmap quintuple
 
 runDay :: R.Day
 runDay = R.runDay inputParser partA partB

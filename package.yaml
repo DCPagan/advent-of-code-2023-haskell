@@ -24,10 +24,13 @@ dependencies:
 - array
 - attoparsec
 - base >= 4.7 && < 5
+- bifunctors
 - containers
 - data-fix
 - directory
 - distributive
+- extra
+- kan-extensions
 - lens
 - mtl
 - optparse-applicative
@@ -35,11 +38,14 @@ dependencies:
 - parser-combinators
 - text
 - time
+- transformers
 - unordered-containers
 - vector
 
 library:
   source-dirs: src
+  ghc-options:
+  - -freduction-depth=0
   default-extensions:
   - AllowAmbiguousTypes
   - DataKinds
