@@ -12,25 +12,21 @@ module Days.Day12 (runDay) where
 import           Control.Applicative
 import           Control.Arrow
 import           Control.Monad.Codensity
+import           Control.Monad.Fix
 import           Control.Lens hiding (cons, snoc, uncons, unsnoc)
 import           Control.Monad
 import           Data.Attoparsec.Text hiding (Fail, take)
 import           Data.Coerce
-import           Data.Fix
 import           Data.Function
 import           Data.Functor
 import           Data.List
-import           Data.List.Extra
 import           Data.List.NonEmpty (NonEmpty((:|)), nonEmpty, toList)
 import           Data.Maybe
 import           Data.Monoid
-import           Data.Void
-import           GHC.Read
 import qualified Text.ParserCombinators.ReadPrec as RP
+import           Text.Read
 import qualified Program.RunDay as R (runDay, Day)
 import qualified Util.Util as U
-import           Data.Text.Internal.Fusion.Types (RS(RS0))
-import           Data.Bifunctor.TH (deriveBifunctor)
 
 ------------ TYPES ------------
 data SpringCondition where
@@ -75,8 +71,8 @@ data SpringParserF a where
   Fail :: SpringParserF a
   GetCondition :: (SpringCondition -> SpringParserF a) -> SpringParserF a
   GetGroup :: (Word -> SpringParserF a) -> SpringParserF a
-  Bifurcate :: SpringParserF a -> SpringParserF a -> SpringParserF a
-  Look :: (ConditionRecord -> SpringParserF a) -> SpringParserF a
+  Peek :: (ConditionRecord -> SpringParserF a) -> SpringParserF a
+  Fork :: SpringParserF a -> SpringParserF a -> SpringParserF a
   Result :: a -> SpringParserF a -> SpringParserF a
   Final :: NonEmpty (a, ConditionRecord) -> SpringParserF a
   deriving (Functor)
@@ -90,8 +86,8 @@ instance Monad SpringParserF => Monad SpringParserF where
   Fail >>= _ = Fail
   GetCondition f >>= k = GetCondition (f >=> k)
   GetGroup f >>= k = GetGroup (f >=> k)
-  Bifurcate p q >>= k = Bifurcate (p >>= k) (q >>= k)
-  Look f >>= k = Look (f >=> k)
+  Peek f >>= k = Peek (f >=> k)
+  Fork p q >>= k = Fork (p >>= k) (q >>= k)
   Result x p >>= k = k x <|> (p >>= k)
   Final rs >>= k = final $ toList rs >>= uncurry (run . k)
 
@@ -105,32 +101,32 @@ instance Alternative SpringParserF where
   Fail <|> p = p
   p <|> Fail = p
   Final r <|> Final s = Final (r <> s)
-  Final r <|> p = Look $ Final . maybe r (r <>) . nonEmpty . run p
-  p <|> Final r = Look $ Final . maybe r (<> r) . nonEmpty . run p
-  Look f <|> Look g = Look $ uncurry (<|>) <<< f &&& g
-  Look f <|> p = Look $ (<|> p) . f
-  p <|> Look f = Look $ (p <|>) . f
-  GetCondition f <|> GetGroup g = Bifurcate (GetCondition f) (GetGroup g)
-  GetGroup g <|> GetCondition f = Bifurcate (GetCondition f) (GetGroup g)
-  Bifurcate p q <|> Bifurcate r s = Bifurcate (Bifurcate p r) (Bifurcate q s)
-  Bifurcate p q <|> r = Bifurcate (p <|> r) (q <|> r)
-  r <|> Bifurcate p q = Bifurcate (r <|> p) (r <|> q)
+  Final r <|> p = Peek $ Final . maybe r (r <>) . nonEmpty . run p
+  p <|> Final r = Peek $ Final . maybe r (<> r) . nonEmpty . run p
+  Peek f <|> Peek g = Peek $ uncurry (<|>) <<< f &&& g
+  Peek f <|> p = Peek $ (<|> p) . f
+  p <|> Peek f = Peek $ (p <|>) . f
+  c@GetCondition {} <|> g@GetGroup {} = Fork g c
+  g@GetGroup {} <|> c@GetCondition {} = Fork g c
+  Fork p q <|> Fork r s = Fork (p <|> r) (q <|> s)
+  Fork p q <|> r = Fork (p <|> r) (q <|> r)
+  r <|> Fork p q = Fork (r <|> p) (r <|> q)
 
 instance MonadPlus SpringParserF
 
 instance MonadFail SpringParserF where
   fail = const Fail
 
-type SpringParser = Codensity SpringParserF
-
 instance (Show a) => Show (SpringParserF a) where
   show Fail = "Fail"
   show (GetCondition _) = "GetCondition"
   show (GetGroup _) = "GetGroup"
-  show (Bifurcate p q) = "Bifurcate " ++ show p ++ " " ++ show q
-  show (Look _) = "Look"
+  show (Fork p q) = "Fork " ++ show p ++ " " ++ show q
+  show (Peek _) = "Peek"
   show (Result x p) = "Result: " ++ show x ++ " " ++ show p
   show (Final r) = "Final: " ++ show r
+
+type SpringParser = Codensity SpringParserF
 
 type Input = [ConditionRecord]
 
@@ -150,8 +146,8 @@ run (GetCondition f) cr@ConditionRecord { _row = c:cs } =
   run (f c) cr { _row = cs }
 run (GetGroup f) cr@ConditionRecord { _groups = g:gs } =
   run (f g) cr { _groups = gs }
-run (Bifurcate p q) cr = run p cr ++ run q cr
-run (Look f) cr = run (f cr) cr
+run (Fork p q) cr = run p cr ++ run q cr
+run (Peek f) cr = run (f cr) cr
 run (Result x p) cr = (x, cr):run p cr
 run (Final (r :| rs)) _ = r:rs
 run _ _ = []
@@ -165,8 +161,8 @@ getCondition = Codensity GetCondition
 getGroup :: SpringParser Word
 getGroup = Codensity GetGroup
 
-look :: SpringParser ConditionRecord
-look = Codensity Look
+peek :: SpringParser ConditionRecord
+peek = Codensity Peek
 
 satisfyCondition :: (SpringCondition -> Bool) -> SpringParser SpringCondition
 satisfyCondition p = do
@@ -177,8 +173,8 @@ satisfyCondition p = do
 
 eof :: SpringParser ()
 eof = do
-  ConditionRecord { .. } <- look
-  unless (null _row) empty
+  ConditionRecord { .. } <- peek
+  guard $ null _row && null _groups
 
 getDamaged :: SpringParser SpringCondition
 getDamaged = satisfyCondition (\x -> x == Damaged || x == Unknown) $> Damaged
@@ -201,11 +197,10 @@ getUnknowns :: SpringParser [SpringCondition]
 getUnknowns = getDamageds <|> getOperationals
 
 getAllSprings :: SpringParser [SpringCondition]
-getAllSprings = join <$> many getUnknowns
+getAllSprings = join <$> many getUnknowns <* eof
 
 parseSprings :: ConditionRecord -> [[SpringCondition]]
-parseSprings =
-  map fst . filter ((emptyRecord ==) . snd) . runSprings getAllSprings
+parseSprings = map fst . runSprings getAllSprings
 
 springCondition :: Parser SpringCondition
 springCondition =
