@@ -121,8 +121,8 @@ instance (Show a) => Show (SpringParserF a) where
   show Fail = "Fail"
   show (GetCondition _) = "GetCondition"
   show (GetGroup _) = "GetGroup"
-  show (Fork p q) = "Fork " ++ show p ++ " " ++ show q
   show (Peek _) = "Peek"
+  show (Fork p q) = "Fork: " ++ show p ++ " " ++ show q
   show (Result x p) = "Result: " ++ show x ++ " " ++ show p
   show (Final r) = "Final: " ++ show r
 
@@ -135,8 +135,32 @@ type OutputA = Word
 type OutputB = Word
 
 ------------ PARSER ------------
+springCondition :: Parser SpringCondition
+springCondition =
+  char '#' $> Damaged <|> char '.' $> Operational <|> char '?' $> Unknown
+
+conditionRecord :: Parser ConditionRecord
+conditionRecord = do
+  _row <- many springCondition
+  space
+  _groups <- sepBy decimal $ char ','
+  endOfLine
+  return ConditionRecord { .. }
+
+inputParser :: Parser Input
+inputParser = many conditionRecord
+
 emptyRecord :: ConditionRecord
 emptyRecord = ConditionRecord { _row = [], _groups = [] }
+
+nullRecord :: ConditionRecord -> Bool
+nullRecord ConditionRecord { .. } = null _row && null _groups
+
+canBeDamaged :: SpringCondition -> Bool
+canBeDamaged x = x == Damaged || x == Unknown
+
+canBeOperational :: SpringCondition -> Bool
+canBeOperational x = x == Operational || x == Unknown
 
 final :: [(a, ConditionRecord)] -> SpringParserF a
 final = maybe Fail Final . nonEmpty
@@ -164,58 +188,38 @@ getGroup = Codensity GetGroup
 peek :: SpringParser ConditionRecord
 peek = Codensity Peek
 
+endOfRecord :: SpringParser ()
+endOfRecord = peek >>= guard . nullRecord
+
 satisfyCondition :: (SpringCondition -> Bool) -> SpringParser SpringCondition
 satisfyCondition p = do
   x <- getCondition
-  if p x
-    then return x
-    else empty
+  guard (p x) $> x
 
-eof :: SpringParser ()
-eof = do
-  ConditionRecord { .. } <- peek
-  guard $ null _row && null _groups
+damaged :: SpringParser SpringCondition
+damaged = satisfyCondition canBeDamaged $> Damaged
 
-getDamaged :: SpringParser SpringCondition
-getDamaged = satisfyCondition (\x -> x == Damaged || x == Unknown) $> Damaged
+operational :: SpringParser SpringCondition
+operational = satisfyCondition canBeOperational $> Operational
 
-getOperational :: SpringParser SpringCondition
-getOperational = satisfyCondition (\x -> x == Operational || x == Unknown)
-  $> Operational
-
-getDamageds :: SpringParser [SpringCondition]
-getDamageds = do
+damageds :: SpringParser [SpringCondition]
+damageds = do
   g <- getGroup
-  ds <- replicateM (fromIntegral g) getDamaged
-  os <- eof $> [] <|> getOperationals
+  ds <- replicateM (fromIntegral g) damaged
+  os <- endOfRecord $> [] <|> operationals
   return $ ds ++ os
 
-getOperationals :: SpringParser [SpringCondition]
-getOperationals = singleton <$> getOperational
+operationals :: SpringParser [SpringCondition]
+operationals = singleton <$> operational
 
-getUnknowns :: SpringParser [SpringCondition]
-getUnknowns = getDamageds <|> getOperationals
+unknown :: SpringParser [SpringCondition]
+unknown = damageds <|> operationals
 
-getAllSprings :: SpringParser [SpringCondition]
-getAllSprings = join <$> many getUnknowns <* eof
+springs :: SpringParser [SpringCondition]
+springs = join <$> (many unknown <* endOfRecord)
 
 parseSprings :: ConditionRecord -> [[SpringCondition]]
-parseSprings = map fst . runSprings getAllSprings
-
-springCondition :: Parser SpringCondition
-springCondition =
-  char '#' $> Damaged <|> char '.' $> Operational <|> char '?' $> Unknown
-
-conditionRecord :: Parser ConditionRecord
-conditionRecord = do
-  _row <- many springCondition
-  space
-  _groups <- sepBy decimal $ char ','
-  endOfLine
-  return ConditionRecord { .. }
-
-inputParser :: Parser Input
-inputParser = many conditionRecord
+parseSprings = map fst . runSprings springs
 
 ------------ PART A ------------
 countParses :: ConditionRecord -> Word
@@ -226,15 +230,17 @@ partA = getSum . foldMap (coerce . countParses)
 
 ------------ PART B ------------
 duplicate :: Int -> ConditionRecord -> ConditionRecord
-duplicate n =
-  row %~ intercalate [Unknown] . replicate n <<< groups %~ concat . replicate n
+duplicate n ConditionRecord { .. } = ConditionRecord {
+  _row = intercalate [Unknown] $ replicate n _row,
+  _groups = concat $ replicate n _groups
+}
 
 quintuple :: ConditionRecord -> ConditionRecord
 quintuple = duplicate 5
 
 partB :: Input -> OutputB
 -- partB = error "Unimplemented"
-partB = partA <<< fmap quintuple
+partB = partA . fmap quintuple
 
 runDay :: R.Day
 runDay = R.runDay inputParser partA partB
