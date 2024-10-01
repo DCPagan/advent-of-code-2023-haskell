@@ -8,26 +8,26 @@
 
 {-# HLINT ignore "Use infix" #-}
 
-module Days.Day12 ( runDay ) where
+module Days.Day12 (runDay) where
 
 import Control.Applicative
 import Control.Arrow
-import Control.Lens hiding ( cons,snoc,uncons,unsnoc )
+import Control.Lens hiding (cons,snoc,uncons,unsnoc)
 import Control.Monad
 import Control.Monad.Codensity
 import Control.Monad.Memo
 
-import Data.Attoparsec.Text hiding ( Fail,take )
+import Data.Attoparsec.Text hiding (Fail,take)
 import Data.Coerce
 import Data.Fix
 import Data.Function
 import Data.Functor
 import Data.List
-import Data.List.NonEmpty ( NonEmpty((:|)),nonEmpty,toList )
+import Data.List.NonEmpty (NonEmpty((:|)),nonEmpty,toList)
 import Data.Maybe
 import Data.Monoid
 
-import qualified Program.RunDay as R ( Day,runDay )
+import qualified Program.RunDay as R (Day,runDay)
 
 import qualified Text.ParserCombinators.ReadPrec as RP
 import Text.Read
@@ -40,7 +40,7 @@ data SpringCondition where
   Operational :: SpringCondition -- .
   Unknown :: SpringCondition     -- ?
   Error :: SpringCondition       -- ¿
-  deriving ( Enum,Bounded,Eq,Ord )
+  deriving (Enum,Bounded,Eq,Ord)
 
 makeLenses ''SpringCondition
 
@@ -67,9 +67,10 @@ fromSpringCondition Unknown = '?'
 fromSpringCondition Error = '¿'
 
 data ConditionRecord where
-  ConditionRecord :: { _row :: [SpringCondition], _groups :: [Word] }
-    -> ConditionRecord
-  deriving ( Eq,Ord,Show )
+  ConditionRecord :: { _row :: [SpringCondition],
+                       _groups :: [Word]
+                     } -> ConditionRecord
+  deriving (Eq,Ord,Show)
 
 makeLenses ''ConditionRecord
 
@@ -81,7 +82,7 @@ data SpringParserF a where
   Fork :: SpringParserF a -> SpringParserF a -> SpringParserF a
   Result :: a -> SpringParserF a -> SpringParserF a
   Final :: NonEmpty (a, ConditionRecord) -> SpringParserF a
-  deriving ( Functor )
+  deriving (Functor)
 
 instance Applicative SpringParserF where
   pure x = Result x Fail
@@ -135,25 +136,22 @@ instance (Show a) => Show (SpringParserF a) where
 data SpringTrieF a where
   Tip :: SpringTrieF a
   Leaf :: SpringTrieF a
-  NextDamaged :: a -> SpringTrieF a
-  NextOperational :: a -> SpringTrieF a
+  Pure :: a -> SpringTrieF a
   Node :: a -> a -> SpringTrieF a
-  deriving ( Functor )
+  deriving (Functor)
 
 instance Foldable SpringTrieF where
-  foldMap = undefined
+  foldMap f = getConst . traverse (Const . f)
 
 instance Traversable SpringTrieF where
   traverse _ Tip = pure Tip
   traverse _ Leaf = pure Leaf
-  traverse f (NextDamaged x) = NextDamaged <$> f x
-  traverse f (NextOperational x) = NextOperational <$> f x
+  traverse f (Pure x) = Pure <$> f x
   traverse f (Node x y) = Node <$> f x <*> f y
 
   sequenceA Tip = pure Tip
   sequenceA Leaf = pure Leaf
-  sequenceA (NextDamaged x) = NextDamaged <$> x
-  sequenceA (NextOperational x) = NextOperational <$> x
+  sequenceA (Pure x) = Pure <$> x
   sequenceA (Node x y) = Node <$> x <*> y
 
 type SpringParser = Codensity SpringParserF
@@ -183,13 +181,19 @@ conditionRecord = do
   space
   _groups <- sepBy decimal $ char ','
   endOfLine
-  return ConditionRecord { .. }
+  return
+    ConditionRecord
+    { ..
+    }
 
 inputParser :: Parser Input
 inputParser = many conditionRecord
 
 emptyRecord :: ConditionRecord
-emptyRecord = ConditionRecord { _row = [], _groups = [] }
+emptyRecord = ConditionRecord
+  { _row = [],
+    _groups = []
+  }
 
 nullRecord :: ConditionRecord -> Bool
 nullRecord ConditionRecord{..} = null _row && null _groups
@@ -205,10 +209,16 @@ final :: [(a, ConditionRecord)] -> SpringParserF a
 final = maybe Fail Final . nonEmpty
 
 run :: SpringParserF a -> ConditionRecord -> [(a, ConditionRecord)]
-run (GetCondition f) cr@ConditionRecord{_row = c:cs} =
-  run (f c) cr { _row = cs }
-run (GetGroup f) cr@ConditionRecord{_groups = g:gs} =
-  run (f g) cr { _groups = gs }
+run (GetCondition f) cr@ConditionRecord{_row = c:cs} = run
+  (f c)
+  cr
+  { _row = cs
+  }
+run (GetGroup f) cr@ConditionRecord{_groups = g:gs} = run
+  (f g)
+  cr
+  { _groups = gs
+  }
 run (Fork p q) cr = run p cr ++ run q cr
 run (Peek f) cr = run (f cr) cr
 run (Result x p) cr = (x, cr) : run p cr
@@ -272,19 +282,26 @@ takeDamaged ConditionRecord{..} = do
   (g,gs) <- uncons _groups
   let g' = fromIntegral g
   let (ds,remnant) = take (g' + 1) &&& drop (g' + 1) $ _row
-  let cr = ConditionRecord { _row = remnant, _groups = gs }
+  let cr = ConditionRecord
+        { _row = remnant,
+          _groups = gs
+        }
   case compare g' $ length ds of
     LT -> if all canBeDamaged (init ds) && canBeOperational (last ds)
       then return cr
       else Nothing
-    GT -> Nothing
     EQ -> if all canBeDamaged ds then return cr else Nothing
+    GT -> Nothing
 
 takeOperational :: ConditionRecord -> Maybe ConditionRecord
 takeOperational ConditionRecord{..} = do
   (x,xs) <- uncons _row
   if canBeOperational x
-    then return ConditionRecord { _row = xs, .. }
+    then return
+      ConditionRecord
+      { _row = xs,
+        ..
+      }
     else Nothing
 
 trieCoalg :: SpringCoalgebra ConditionRecord
@@ -294,50 +311,45 @@ trieCoalg cr@ConditionRecord{_groups = [],..}
 trieCoalg cr@ConditionRecord{_groups = (g:gs),..} = case uncons _row of
   Nothing -> Tip
   Just (x,xs) -> case x of
-    Damaged -> maybe Tip NextDamaged $ takeDamaged cr
-    Operational -> maybe Tip NextOperational $ takeOperational cr
+    Damaged -> maybe Tip Pure $ takeDamaged cr
+    Operational -> maybe Tip Pure $ takeOperational cr
     Unknown -> case (takeDamaged cr, takeOperational cr) of
       (Nothing,Nothing) -> Tip
-      (Nothing,Just y) -> NextOperational y
-      (Just x,Nothing) -> NextDamaged x
+      (Nothing,Just y) -> Pure y
+      (Just x,Nothing) -> Pure x
       (Just x,Just y) -> Node x y
     Error -> Tip
 
 trieAlg :: SpringAlgebra Word
 trieAlg Tip = 0
 trieAlg Leaf = 1
-trieAlg (NextDamaged x) = x
-trieAlg (NextOperational x) = x
+trieAlg (Pure x) = x
 trieAlg (Node x y) = x + y
-
--- Memoized holomorphism
-memoHylo :: (MonadMemo ConditionRecord Word m)
-  => SpringAlgebra Word
-  -> SpringCoalgebra ConditionRecord
-  -> ConditionRecord
-  -> m Word
-memoHylo alg coalg = hylo
-  where
-    hylo = memo $ return . alg <=< traverse hylo . coalg
-
-memoCountParses
-  :: (MonadMemo ConditionRecord Word m) => ConditionRecord -> m Word
-memoCountParses = memoHylo trieAlg trieCoalg
 
 springHylo :: ConditionRecord -> Word
 springHylo = refold trieAlg trieCoalg
 
+-- Memoized holomorphism
+memoHylo :: SpringAlgebra Word
+  -> SpringCoalgebra ConditionRecord -> ConditionRecord -> Word
+memoHylo alg coalg = startEvalMemo . hylo
+  where
+    hylo = memo $ return . alg <=< traverse hylo . coalg
+
+memoCountParses :: ConditionRecord -> Word
+memoCountParses = memoHylo trieAlg trieCoalg
+
 duplicate :: Int -> ConditionRecord -> ConditionRecord
-duplicate n ConditionRecord{..} =
-  ConditionRecord { _row = intercalate [ Unknown ] $ replicate n _row
-                  , _groups = concat $ replicate n _groups
-                  }
+duplicate n ConditionRecord{..} = ConditionRecord
+  { _row = intercalate [Unknown] $ replicate n _row,
+    _groups = concat $ replicate n _groups
+  }
 
 quintuple :: ConditionRecord -> ConditionRecord
 quintuple = duplicate 5
 
 partB :: Input -> OutputB
-partB = getSum . foldMap (coerce . startEvalMemo . memoCountParses . quintuple)
+partB = getSum . foldMap (coerce . memoCountParses . quintuple)
 
 runDay :: R.Day
 runDay = R.runDay inputParser partA partB
