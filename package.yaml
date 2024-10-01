@@ -32,6 +32,8 @@ dependencies:
 - extra
 - kan-extensions
 - lens
+- memoize
+- monad-memo
 - mtl
 - optparse-applicative
 - parsec
