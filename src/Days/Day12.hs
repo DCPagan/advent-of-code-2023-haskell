@@ -42,17 +42,17 @@ data SpringCondition where
   Error :: SpringCondition       -- ¿
   deriving (Enum,Bounded,Eq,Ord)
 
-makeLenses ''SpringCondition
-
-instance Show SpringCondition where
-  show = (: []) . fromSpringCondition
-
-  showList ls s = fmap fromSpringCondition ls ++ s
+makePrisms ''SpringCondition
 
 instance Read SpringCondition where
   readPrec = toSpringCondition <$> RP.get
 
   readListPrec = many readPrec
+
+instance Show SpringCondition where
+  show = (: []) . fromSpringCondition
+
+  showList ls s = fmap fromSpringCondition ls ++ s
 
 toSpringCondition :: Char -> SpringCondition
 toSpringCondition '#' = Damaged
