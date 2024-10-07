@@ -1,6 +1,4 @@
 {-# LANGUAGE GADTs #-}
-
-{-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Days.Day13 (runDay) where
@@ -28,8 +26,6 @@ import qualified Program.RunDay as R (Day,runDay)
 import qualified Text.ParserCombinators.ReadP as R
 import qualified Text.ParserCombinators.ReadPrec as RP
 import Text.Read
-
-import qualified Util.Util as U
 
 ------------ TYPES ------------
 data Ground where
@@ -224,8 +220,8 @@ getLatitudesWithSmudge g = filter
   (\l -> length (assymetriesOnLatitude g l) == 1) . getLatitudes $ g
 
 symmetryScoreWithSmudges :: Grid -> Word
-symmetryScoreWithSmudges g = sum (getLongitudesWithSmudge g)
-  + 100 * sum (getLatitudesWithSmudge g)
+symmetryScoreWithSmudges g = sum (getLongitudesWithSmudge g) + 100 * sum
+  (getLatitudesWithSmudge g)
 
 partB :: Input -> OutputB
 partB = getSum . foldMap (coerce . symmetryScoreWithSmudges)

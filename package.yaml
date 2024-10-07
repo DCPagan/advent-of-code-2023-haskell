@@ -38,6 +38,7 @@ dependencies:
 - optparse-applicative
 - parsec
 - parser-combinators
+- split
 - text
 - time
 - transformers
