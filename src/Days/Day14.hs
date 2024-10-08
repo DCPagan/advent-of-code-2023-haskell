@@ -9,6 +9,8 @@ import Control.Monad
 import Control.Monad.Combinators
 
 import Data.Array.IArray
+import Data.Array.MArray
+import Data.Array.ST
 import Data.Attoparsec.Text (Parser,anyChar,char,endOfLine)
 import Data.Bifunctor
 import Data.Coerce
@@ -27,6 +29,7 @@ import qualified Text.ParserCombinators.ReadPrec as RP
 import Text.Read
 
 import qualified Util.Util as U
+import Data.Semigroup (stimesMonoid)
 
 ------------ TYPES ------------
 data Rock where
@@ -62,9 +65,8 @@ fromRock Cube = '#'
 fromRock Space = '.'
 fromRock Error = '¿'
 
-newtype Grid = Grid
-  { unGrid :: Array (Word, Word) Rock
-  }
+newtype Grid = Grid { unGrid :: Array (Word, Word) Rock }
+  deriving (Eq, Ord)
 
 instance Read Grid where
   readPrec = toGrid <$> some row
@@ -90,6 +92,15 @@ toGrid g = Grid $ array bounds $ zip (range bounds) $ join g
   where
     bounds = ((0, 0), on (,) (fromIntegral . pred . length) <*> transpose $ g)
 
+data Direction where
+  North :: Direction
+  West :: Direction
+  South :: Direction
+  East :: Direction
+  deriving (Bounded, Eq, Enum, Ord)
+
+makePrisms ''Direction
+
 type Input = Grid
 
 type OutputA = Word
@@ -112,9 +123,6 @@ inputParser :: Parser Input
 inputParser = grid
 
 ------------ PART A ------------
-takeDrop :: Int -> [a] -> ([a], [a])
-takeDrop n = take n &&& drop n
-
 getCubesByLongitude :: Grid -> [[(Word, Word)]]
 getCubesByLongitude = groupBy (on (==) snd) . sortBy comparison . map fst
   . filter ((Cube ==) . snd) . assocs . unGrid
@@ -145,8 +153,44 @@ partA :: Input -> OutputA
 partA = loadOfGrid
 
 ------------ PART B ------------
+splitColumnsInDirection :: Direction -> Grid -> [[[((Word, Word), Rock)]]]
+splitColumnsInDirection d = fmap (splitWhen ((Cube ==) . snd))
+  . groupBy byDirection . sortBy comparison . assocs . unGrid
+  where
+    comparison = case d of
+      North -> getComparison $ compareLongitude <> compareLatitude
+      West -> getComparison $ compareLatitude <> compareLongitude
+      South -> flip $ getComparison $ compareLongitude <> compareLatitude
+      East -> flip $ getComparison $ compareLatitude <> compareLongitude
+    compareLongitude = snd . fst >$< defaultComparison
+    compareLatitude = fst . fst >$< defaultComparison
+    byDirection = case d of
+      North -> equalLongitude
+      West -> equalLatitude
+      South -> equalLongitude
+      East -> equalLatitude
+    equalLongitude = getEquivalence $ snd . fst >$< defaultEquivalence
+    equalLatitude = getEquivalence $ fst . fst >$< defaultEquivalence
+
+tiltSegment :: [((Word, Word), Rock)] -> [((Word, Word), Rock)]
+tiltSegment = zip <$> fmap fst <*> uncurry (++) . partition (Round ==) . fmap snd
+
+tilt :: Direction -> Grid -> Grid
+tilt d gr@(Grid g') = Grid $ runSTArray $ do
+  let splitAssocs = splitColumnsInDirection d gr >>= (>>= tiltSegment)
+  g <- thaw g'
+  mapM_ (uncurry $ writeArray g) splitAssocs
+  return g
+
+spin :: Grid -> Grid
+spin = coerce . foldMap (Dual . Endo . tilt) $ enumFrom minBound
+
+spinCycle :: Word -> Grid -> Grid
+spinCycle 0 g = g
+spinCycle n g = spin $ spinCycle (n - 1) g
+
 partB :: Input -> OutputB
-partB = error "Not implemented yet!"
+partB = undefined
 
 runDay :: R.Day
 runDay = R.runDay inputParser partA partB

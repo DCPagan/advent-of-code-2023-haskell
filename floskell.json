@@ -48,8 +48,23 @@
         "spaces": "both"
       },
       "{": {
+        "force-linebreak": false,
+        "linebreaks": "both",
+        "spaces": "both"
+      },
+      "{ in declaration": {
         "force-linebreak": true,
-        "linebreaks": "after",
+        "linebreaks": "both",
+        "spaces": "both"
+      },
+      "{ in expression": {
+        "force-linebreak": false,
+        "linebreaks": "both",
+        "spaces": "both"
+      },
+      "{ in pattern": {
+        "force-linebreak": false,
+        "linebreaks": "none",
         "spaces": "both"
       },
       "* in pattern": {

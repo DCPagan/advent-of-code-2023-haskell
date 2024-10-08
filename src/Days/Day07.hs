@@ -148,7 +148,7 @@ runDay = R.runDay inputParser partA partB
 
 ------------ PART A ------------
 partA :: Input -> OutputA
--- partA = error "Not implemented yet!"
+-- partA = undefined
 partA = sum . zipWith (*) (enumFrom 1) . toListOf (traverse . bid) . sort
 
 ------------ PART B ------------

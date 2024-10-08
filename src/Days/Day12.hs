@@ -67,8 +67,9 @@ fromSpringCondition Unknown = '?'
 fromSpringCondition Error = '¿'
 
 data ConditionRecord where
-  ConditionRecord :: { _row :: [SpringCondition],
-                       _groups :: [Word]
+  ConditionRecord :: {
+                     _row :: [SpringCondition],
+                     _groups :: [Word]
                      } -> ConditionRecord
   deriving (Eq,Ord,Show)
 
@@ -182,18 +183,13 @@ conditionRecord = do
   _groups <- sepBy decimal $ char ','
   endOfLine
   return
-    ConditionRecord
-    { ..
-    }
+    ConditionRecord { .. }
 
 inputParser :: Parser Input
 inputParser = many conditionRecord
 
 emptyRecord :: ConditionRecord
-emptyRecord = ConditionRecord
-  { _row = [],
-    _groups = []
-  }
+emptyRecord = ConditionRecord { _row = [], _groups = [] }
 
 nullRecord :: ConditionRecord -> Bool
 nullRecord ConditionRecord{..} = null _row && null _groups
@@ -209,16 +205,8 @@ final :: [(a, ConditionRecord)] -> SpringParserF a
 final = maybe Fail Final . nonEmpty
 
 run :: SpringParserF a -> ConditionRecord -> [(a, ConditionRecord)]
-run (GetCondition f) cr@ConditionRecord{_row = c:cs} = run
-  (f c)
-  cr
-  { _row = cs
-  }
-run (GetGroup f) cr@ConditionRecord{_groups = g:gs} = run
-  (f g)
-  cr
-  { _groups = gs
-  }
+run (GetCondition f) cr@ConditionRecord{_row = c:cs} = run (f c) cr { _row = cs }
+run (GetGroup f) cr@ConditionRecord{_groups = g:gs} = run (f g) cr { _groups = gs }
 run (Fork p q) cr = run p cr ++ run q cr
 run (Peek f) cr = run (f cr) cr
 run (Result x p) cr = (x, cr) : run p cr
@@ -282,10 +270,7 @@ takeDamaged ConditionRecord{..} = do
   (g,gs) <- uncons _groups
   let g' = fromIntegral g
   let (ds,remnant) = take (g' + 1) &&& drop (g' + 1) $ _row
-  let cr = ConditionRecord
-        { _row = remnant,
-          _groups = gs
-        }
+  let cr = ConditionRecord { _row = remnant, _groups = gs }
   case compare g' $ length ds of
     LT -> if all canBeDamaged (init ds) && canBeOperational (last ds)
       then return cr
@@ -298,17 +283,14 @@ takeOperational ConditionRecord{..} = do
   (x,xs) <- uncons _row
   if canBeOperational x
     then return
-      ConditionRecord
-      { _row = xs,
-        ..
-      }
+      ConditionRecord { _row = xs, .. }
     else Nothing
 
 trieCoalg :: SpringCoalgebra ConditionRecord
-trieCoalg cr@ConditionRecord{_groups = [],..}
+trieCoalg cr@ConditionRecord{_groups = [], .. }
   | all canBeOperational _row = Leaf
   | otherwise = Tip
-trieCoalg cr@ConditionRecord{_groups = (g:gs),..} = case uncons _row of
+trieCoalg cr@ConditionRecord{_groups = (g:gs), .. } = case uncons _row of
   Nothing -> Tip
   Just (x,xs) -> case x of
     Damaged -> maybe Tip Pure $ takeDamaged cr
@@ -341,8 +323,9 @@ memoCountParses = memoHylo trieAlg trieCoalg
 
 duplicate :: Int -> ConditionRecord -> ConditionRecord
 duplicate n ConditionRecord{..} = ConditionRecord
-  { _row = intercalate [Unknown] $ replicate n _row,
-    _groups = concat $ replicate n _groups
+  {
+  _row = intercalate [Unknown] $ replicate n _row,
+  _groups = concat $ replicate n _groups
   }
 
 quintuple :: ConditionRecord -> ConditionRecord
