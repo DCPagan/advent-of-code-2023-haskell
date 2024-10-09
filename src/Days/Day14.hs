@@ -7,6 +7,7 @@ import Control.Arrow
 import Control.Lens hiding (cons,uncons)
 import Control.Monad
 import Control.Monad.Combinators
+import Control.Monad.Primitive
 
 import Data.Array.IArray
 import Data.Array.MArray
@@ -65,7 +66,9 @@ fromRock Cube = '#'
 fromRock Space = '.'
 fromRock Error = '¿'
 
-newtype Grid = Grid { unGrid :: Array (Word, Word) Rock }
+type Coord = (Word, Word)
+
+newtype Grid = Grid { unGrid :: Array Coord Rock }
   deriving (Eq, Ord)
 
 instance Read Grid where
@@ -123,7 +126,7 @@ inputParser :: Parser Input
 inputParser = grid
 
 ------------ PART A ------------
-getCubesByLongitude :: Grid -> [[(Word, Word)]]
+getCubesByLongitude :: Grid -> [[Coord]]
 getCubesByLongitude = groupBy (on (==) snd) . sortBy comparison . map fst
   . filter ((Cube ==) . snd) . assocs . unGrid
   where
@@ -133,7 +136,7 @@ getCubesByLongitude = groupBy (on (==) snd) . sortBy comparison . map fst
 load :: Grid -> Word -> Word
 load = (-) . (1 +) . uncurry subtract <<< each %~ fst <<< bounds . unGrid
 
-columnsSplitByCube :: Grid -> [[[((Word, Word), Rock)]]]
+columnsSplitByCube :: Grid -> [[[(Coord, Rock)]]]
 columnsSplitByCube = fmap (splitWhen ((Cube ==) . snd))
   . groupBy (on (==) $ snd . fst) . sortBy comparison . assocs . unGrid
   where
@@ -141,7 +144,7 @@ columnsSplitByCube = fmap (splitWhen ((Cube ==) . snd))
       $ (snd . fst >$< defaultComparison)
       <> (fst . fst >$< defaultComparison)
 
-loadOfTiltedSegment :: Grid -> [((Word, Word), Rock)] -> Word
+loadOfTiltedSegment :: Grid -> [(Coord, Rock)] -> Word
 loadOfTiltedSegment g = coerce . foldMap (Sum . load g . fst . fst)
   <<< take =<< lengthOf (traverse . _2 . filtered (Round ==))
 
@@ -153,9 +156,14 @@ partA :: Input -> OutputA
 partA = loadOfGrid
 
 ------------ PART B ------------
-splitColumnsInDirection :: Direction -> Grid -> [[[((Word, Word), Rock)]]]
-splitColumnsInDirection d = fmap (splitWhen ((Cube ==) . snd))
-  . groupBy byDirection . sortBy comparison . assocs . unGrid
+splitColumnsInDirection :: (PrimMonad m, MArray a Rock m)
+  => Direction
+  -> a Coord Rock
+  -> m [[[(Coord, Rock)]]]
+splitColumnsInDirection d =
+  fmap (
+    fmap (splitWhen ((Cube ==) . snd)) . groupBy byDirection . sortBy comparison
+  ) . getAssocs
   where
     comparison = case d of
       North -> getComparison $ compareLongitude <> compareLatitude
@@ -172,22 +180,37 @@ splitColumnsInDirection d = fmap (splitWhen ((Cube ==) . snd))
     equalLongitude = getEquivalence $ snd . fst >$< defaultEquivalence
     equalLatitude = getEquivalence $ fst . fst >$< defaultEquivalence
 
-tiltSegment :: [((Word, Word), Rock)] -> [((Word, Word), Rock)]
+tiltSegment :: [(Coord, Rock)] -> [(Coord, Rock)]
 tiltSegment = zip <$> fmap fst <*> uncurry (++) . partition (Round ==) . fmap snd
 
-tilt :: Direction -> Grid -> Grid
-tilt d gr@(Grid g') = Grid $ runSTArray $ do
-  let splitAssocs = splitColumnsInDirection d gr >>= (>>= tiltSegment)
-  g <- thaw g'
-  mapM_ (uncurry $ writeArray g) splitAssocs
+tilt :: (PrimMonad m, MArray a Rock m)
+  => Direction
+  -> a Coord Rock
+  -> m (a Coord Rock)
+tilt d g = do
+  splitAssocs <- splitColumnsInDirection d g
+  let tiltedAssocs = splitAssocs >>= (>>= tiltSegment)
+  mapM_ (uncurry $ writeArray g) tiltedAssocs
   return g
 
-spin :: Grid -> Grid
-spin = coerce . foldMap (Dual . Endo . tilt) $ enumFrom minBound
+spin :: (PrimMonad m, MArray a Rock m)
+  => a Coord Rock
+  -> m (a Coord Rock)
+spin = foldr ((>=>) . tilt) return $ enumFrom minBound
 
-spinCycle :: Word -> Grid -> Grid
-spinCycle 0 g = g
-spinCycle n g = spin $ spinCycle (n - 1) g
+spinGrid :: Grid -> Grid
+spinGrid (Grid g) = Grid $ runSTArray $ thaw g >>= spin
+
+spinCycle :: (PrimMonad m, MArray a Rock m)
+  => Word
+  -> a Coord Rock
+  -> m (a Coord Rock)
+spinCycle 0 g = return g
+spinCycle n g = spinCycle (n - 1) g >>= spin
+
+spinCycleGrid :: Word -> Grid -> Grid
+spinCycleGrid 0 g = g
+spinCycleGrid n (Grid g) = Grid $ runSTArray $ thaw g >>= spinCycle n
 
 partB :: Input -> OutputB
 partB = undefined
