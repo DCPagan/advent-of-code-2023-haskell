@@ -13,15 +13,15 @@ import Data.Array.IArray
 import Data.Array.MArray
 import Data.Array.ST
 import Data.Attoparsec.Text (Parser,anyChar,char,endOfLine)
-import Data.Bifunctor
 import Data.Coerce
 import Data.Function
 import Data.Functor
 import Data.Functor.Contravariant
 import Data.List
 import Data.List.Split (splitWhen)
+import qualified Data.Map as M
 import Data.Monoid
-import Data.Void
+import Data.Tuple.Extra (uncurry3)
 
 import qualified Program.RunDay as R (Day,runDay)
 
@@ -104,11 +104,13 @@ data Direction where
 
 makePrisms ''Direction
 
+type Cache = M.Map Grid Word
+
 type Input = Grid
 
 type OutputA = Word
 
-type OutputB = Void
+type OutputB = Maybe Word
 
 ------------ PARSER ------------
 rock :: Parser Rock
@@ -161,24 +163,15 @@ splitColumnsInDirection :: (PrimMonad m, MArray a Rock m)
   -> a Coord Rock
   -> m [[[(Coord, Rock)]]]
 splitColumnsInDirection d =
-  fmap (
-    fmap (splitWhen ((Cube ==) . snd)) . groupBy byDirection . sortBy comparison
-  ) . getAssocs
+  fmap (fmap (splitWhen ((Cube ==) . snd)) . groupLines . groupByLatitude)
+    . getAssocs
   where
-    comparison = case d of
-      North -> getComparison $ compareLongitude <> compareLatitude
-      West -> getComparison $ compareLatitude <> compareLongitude
-      South -> flip $ getComparison $ compareLongitude <> compareLatitude
-      East -> flip $ getComparison $ compareLatitude <> compareLongitude
-    compareLongitude = snd . fst >$< defaultComparison
-    compareLatitude = fst . fst >$< defaultComparison
-    byDirection = case d of
-      North -> equalLongitude
-      West -> equalLatitude
-      South -> equalLongitude
-      East -> equalLatitude
-    equalLongitude = getEquivalence $ snd . fst >$< defaultEquivalence
-    equalLatitude = getEquivalence $ fst . fst >$< defaultEquivalence
+    groupByLatitude = groupBy $ on (==) $ fst . fst
+    groupLines = case d of
+      North -> transpose
+      West -> id
+      South -> fmap reverse . transpose
+      East -> fmap reverse
 
 tiltSegment :: [(Coord, Rock)] -> [(Coord, Rock)]
 tiltSegment = zip <$> fmap fst <*> uncurry (++) . partition (Round ==) . fmap snd
@@ -201,6 +194,26 @@ spin = foldr ((>=>) . tilt) return $ enumFrom minBound
 spinGrid :: Grid -> Grid
 spinGrid (Grid g) = Grid $ runSTArray $ thaw g >>= spin
 
+spins :: Grid -> [Grid]
+spins = iterate spinGrid
+
+spinsCached :: Grid -> [(Grid, Cache, Word)]
+spinsCached = iterate go . (, mempty, 0)
+  where
+    go (g, c, i) = (spinGrid g, M.insertWith (const id) g i c, succ i)
+
+firstSpinDuplicate :: Grid -> Maybe (Word, Word, Cache)
+firstSpinDuplicate = preview
+  $ to spinsCached . traverse . to (\(g, c, i) -> (,i,c) <$> c M.!? g) . _Just
+
+billionthSpin :: Word -> Word -> Cache -> Maybe Grid
+billionthSpin i j = fmap fst
+  . ifind (\_ n -> i + on mod (subtract i) 1_000_000_000 j == n)
+
+billionthLoad :: Grid -> Maybe Word
+billionthLoad =
+  firstSpinDuplicate >=> uncurry3 billionthSpin >>> fmap loadOfGrid
+
 spinCycle :: (PrimMonad m, MArray a Rock m)
   => Word
   -> a Coord Rock
@@ -213,7 +226,7 @@ spinCycleGrid 0 g = g
 spinCycleGrid n (Grid g) = Grid $ runSTArray $ thaw g >>= spinCycle n
 
 partB :: Input -> OutputB
-partB = undefined
+partB = billionthLoad
 
 runDay :: R.Day
 runDay = R.runDay inputParser partA partB
