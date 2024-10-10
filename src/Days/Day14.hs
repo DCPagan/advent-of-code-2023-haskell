@@ -150,14 +150,19 @@ loadOfTiltedSegment :: Grid -> [(Coord, Rock)] -> Word
 loadOfTiltedSegment g = coerce . foldMap (Sum . load g . fst . fst)
   <<< take =<< lengthOf (traverse . _2 . filtered (Round ==))
 
-loadOfGrid :: Grid -> Word
-loadOfGrid g = coerce . foldMap (foldMap (Sum . loadOfTiltedSegment g))
+loadOfTiltedGrid :: Grid -> Word
+loadOfTiltedGrid g = coerce . foldMap (foldMap (Sum . loadOfTiltedSegment g))
   . columnsSplitByCube $ g
 
 partA :: Input -> OutputA
-partA = loadOfGrid
+partA = loadOfTiltedGrid
 
 ------------ PART B ------------
+loadOfGrid :: Grid -> Word
+loadOfGrid (Grid g) = coerce
+  . foldMapOf (to assocs . traverse . filteredBy (_2 . only Round) . _1 . _1)
+  (Sum . ((-) . succ . fst . snd . bounds $ g)) $ g
+
 splitColumnsInDirection :: (PrimMonad m, MArray a Rock m)
   => Direction
   -> a Coord Rock
@@ -185,6 +190,9 @@ tilt d g = do
   let tiltedAssocs = splitAssocs >>= (>>= tiltSegment)
   mapM_ (uncurry $ writeArray g) tiltedAssocs
   return g
+
+tiltGrid :: Direction -> Grid -> Grid
+tiltGrid d (Grid g) = Grid $ runSTArray $ thaw g >>= tilt d
 
 spin :: (PrimMonad m, MArray a Rock m)
   => a Coord Rock
