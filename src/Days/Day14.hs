@@ -4,7 +4,7 @@
 module Days.Day14 (runDay) where
 
 import Control.Arrow
-import Control.Lens hiding (cons,uncons)
+import Control.Lens hiding (cons,uncons,snoc,unsnoc)
 import Control.Monad
 import Control.Monad.Combinators
 import Control.Monad.Primitive
@@ -18,8 +18,10 @@ import Data.Function
 import Data.Functor
 import Data.Functor.Contravariant
 import Data.List
+import Data.List.Extra (unsnoc)
 import Data.List.Split (splitWhen)
 import qualified Data.Map as M
+import Data.Maybe
 import Data.Monoid
 import Data.Tuple.Extra (uncurry3)
 
@@ -85,22 +87,29 @@ instance Read Grid where
       endOfLine = lift $ R.char '\n' $> () <|> R.string "\r\n" $> ()
 
 instance Show Grid where
-  show = intercalate "\n" . fmap (show . fmap snd) . groupBy
-    (on (==) $ fst . fst) . assocs . unGrid
+  show = intercalate "\n" . fmap show . fromGrid
 
   showList ls s = intercalate "\n\n" (fmap show ls) ++ s
 
 toGrid :: [[Rock]] -> Grid
-toGrid g = Grid $ array bounds $ zip (range bounds) $ join g
+toGrid = Grid
+  <<< (array =<< bounds')
+  <<< join . zipWith (fmap . first . (,)) (enumFrom 0) . fmap (zip (enumFrom 0))
   where
-    bounds = ((0, 0), on (,) (fromIntegral . pred . length) <*> transpose $ g)
+    bounds' a = fromMaybe ((0, 1), (0, 0)) $ do
+      head <- fst . fst <$> uncons a
+      last <- fst . snd <$> unsnoc a
+      return (head, last)
+
+fromGrid :: Grid -> [[Rock]]
+fromGrid = fmap (fmap snd) . groupBy (on (==) $ fst . fst) . assocs . unGrid
 
 data Direction where
   North :: Direction
   West :: Direction
   South :: Direction
   East :: Direction
-  deriving (Bounded, Eq, Enum, Ord)
+  deriving (Bounded, Eq, Enum, Ord, Show)
 
 makePrisms ''Direction
 
@@ -140,15 +149,16 @@ load = (-) . (1 +) . uncurry subtract <<< each %~ fst <<< bounds . unGrid
 
 columnsSplitByCube :: Grid -> [[[(Coord, Rock)]]]
 columnsSplitByCube = fmap (splitWhen ((Cube ==) . snd))
-  . groupBy (on (==) $ snd . fst) . sortBy comparison . assocs . unGrid
+  . groupBy sameLongitude . sortBy comparison . assocs . unGrid
   where
+    sameLongitude = on (==) $ snd . fst
     comparison = getComparison
       $ (snd . fst >$< defaultComparison)
       <> (fst . fst >$< defaultComparison)
 
 loadOfTiltedSegment :: Grid -> [(Coord, Rock)] -> Word
 loadOfTiltedSegment g = coerce . foldMap (Sum . load g . fst . fst)
-  <<< take =<< lengthOf (traverse . _2 . filtered (Round ==))
+  <<< take =<< lengthOf (traverse . _2 . filteredBy _Round)
 
 loadOfTiltedGrid :: Grid -> Word
 loadOfTiltedGrid g = coerce . foldMap (foldMap (Sum . loadOfTiltedSegment g))
@@ -160,7 +170,7 @@ partA = loadOfTiltedGrid
 ------------ PART B ------------
 loadOfGrid :: Grid -> Word
 loadOfGrid (Grid g) = coerce
-  . foldMapOf (to assocs . traverse . filteredBy (_2 . only Round) . _1 . _1)
+  . foldMapOf (to assocs . traverse . filteredBy (_2 . _Round) . _1 . _1)
   (Sum . ((-) . succ . fst . snd . bounds $ g)) $ g
 
 splitColumnsInDirection :: (PrimMonad m, MArray a Rock m)
