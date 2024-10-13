@@ -182,12 +182,13 @@ toGrid = (array =<< bounds')
       return (head, last)
 
 class (PrimBase m, MArray a TileHistory m) => BeamMonad a m
+instance (PrimBase m, MArray a TileHistory m) => BeamMonad a m
 
 type Input = Grid
 
 type OutputA = Word
 
-type OutputB = Void
+type OutputB = Word
 
 ------------ PARSER ------------
 tileHistory :: Parser TileHistory
@@ -244,7 +245,7 @@ turnAndStep :: Bounds -> Tile -> Step -> [Step]
 turnAndStep b t coords =
   turn t (coords ^. z) >>= nextStep b . flip (set z) coords
 
-tick :: (PrimBase m, MArray a TileHistory m) => a Coords TileHistory -> Step -> m [Step]
+tick :: (BeamMonad a m) => a Coords TileHistory -> Step -> m [Step]
 tick a coords@CoordsF { .. } = do
   let c = (_y, _x)
   b <- getBounds a
@@ -255,10 +256,10 @@ tick a coords@CoordsF { .. } = do
       modifyArray a c (energized . visited _z .~ True)
       return $ turnAndStep b _tile coords
 
-ticks :: (PrimBase m, MArray a TileHistory m) => a Coords TileHistory -> [Step] -> m [Step]
+ticks :: (BeamMonad a m) => a Coords TileHistory -> [Step] -> m [Step]
 ticks a = fmap join . traverse (tick a)
 
-shine :: (PrimBase m, MArray a TileHistory m)
+shine :: (BeamMonad a m)
   => a Coords TileHistory
   -> [Step]
   -> m (a Coords TileHistory)
@@ -268,8 +269,8 @@ shine a steps = ticks a steps >>= shine a
 start :: Step
 start = CoordsF { _y = 0, _x = 0, _z = East }
 
-illuminate :: Grid -> Grid
-illuminate a' = runSTArray $ do
+illuminate :: Step -> Grid -> Grid
+illuminate start a' = runSTArray $ do
   a <- thaw a'
   shine a [start]
 
@@ -278,11 +279,40 @@ countEnergized =
   fromIntegral . lengthOf (traverse . energized . filtered (dark /=))
 
 partA :: Input -> OutputA
-partA = countEnergized . illuminate
+partA = countEnergized . illuminate start
 
 ------------ PART B ------------
+northStart :: Bounds -> [Step]
+northStart ((northBound, westBound), (_, eastBound)) =
+  flip (set x) coord <$> enumFromTo westBound eastBound
+    where
+      coord = CoordsF { _y = northBound, _x = westBound, _z = South }
+
+eastStart :: Bounds -> [Step]
+eastStart ((northBound, _), (southBound, eastBound)) =
+  flip (set y) coord <$> enumFromTo northBound southBound
+    where
+      coord = CoordsF { _y = northBound, _x = eastBound, _z = West }
+
+southStart :: Bounds -> [Step]
+southStart ((_, westBound), (southBound, eastBound)) =
+  flip (set x) coord <$> enumFromTo westBound eastBound
+    where
+      coord = CoordsF { _y = southBound, _x = westBound, _z = North }
+
+westStart :: Bounds -> [Step]
+westStart ((northBound, westBound), (southBound, _)) =
+  flip (set y) coord <$> enumFromTo northBound southBound
+    where
+      coord = CoordsF { _y = northBound, _x = westBound, _z = East }
+
+boundaries :: Bounds -> [Step]
+boundaries b = [northStart, eastStart, southStart, westStart] >>= ($ b)
+
 partB :: Input -> OutputB
-partB = undefined
+partB input = fromMaybe 0
+  . maximumOf (traverse . to (countEnergized . flip illuminate input))
+  . boundaries $ bounds input
 
 runDay :: R.Day
 runDay = R.runDay inputParser partA partB
